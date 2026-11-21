@@ -2,7 +2,7 @@
   "expo": {
     "name": "DriveGallery",
     "slug": "drive-gallery",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "scheme": "drivegallery",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -44,6 +44,24 @@
             "backgroundColor": "#151413"
           }
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow DriveGallery to use Face ID to unlock your Locked folder."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow DriveGallery to save photos and videos to your gallery.",
+          "savePhotosPermission": "Allow DriveGallery to save photos and videos to your gallery.",
+          "isAccessMediaLocationEnabled": false,
+          "granularPermissions": [
+            "photo",
+            "video"
+          ]
+        }
       ]
     ],
     "experiments": {
@@ -59,6 +77,12 @@
         "projectId": "7a676522-ce56-4583-a396-eb46ee646d0d"
       }
     },
-    "owner": "mikanadhi"
+    "owner": "mikanadhi",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/7a676522-ce56-4583-a396-eb46ee646d0d"
+    }
   }
 }
