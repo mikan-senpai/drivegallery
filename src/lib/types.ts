@@ -17,6 +17,13 @@ export interface MediaItem {
   previewUrl?: string;
   parents?: string[];
   favorite?: boolean;
+  /** Drive's MD5 of the file contents — identical files share it (duplicate finder). */
+  md5?: string;
+  /** Photo GPS position, when the camera recorded one (places map). */
+  lat?: number;
+  lng?: number;
+  /** e.g. "Galaxy S26 Ultra" (search filter). */
+  camera?: string;
 }
 
 export interface DriveFolder {

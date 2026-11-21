@@ -3,8 +3,9 @@
  *
  * Schema:
  *   media(id PK, name, mime, kind, size, taken_at, width, height, duration_ms,
- *         thumb, parent)          — one row per Drive image/video
- *     indexes: taken_at DESC (timeline order), parent (folder scoping)
+ *         thumb, parent, md5, lat, lng, camera)
+ *                                 — one row per Drive image/video
+ *     indexes: taken_at DESC (timeline order), parent (folder scoping), md5 (duplicates)
  *   meta(key PK, value)          — sync bookkeeping:
  *     changes_token    Drive Changes API cursor for delta sync
  *     full_sync_done   '1' once the first full scan completed
@@ -17,7 +18,7 @@ import type { MediaScope } from './folders';
 import type { MediaItem } from './types';
 
 const DB_NAME = 'drivegallery.db';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -41,15 +42,42 @@ async function open(): Promise<SQLite.SQLiteDatabase> {
       height INTEGER,
       duration_ms INTEGER,
       thumb TEXT,
-      parent TEXT
+      parent TEXT,
+      md5 TEXT,
+      lat REAL,
+      lng REAL,
+      camera TEXT
     );
     CREATE INDEX IF NOT EXISTS media_taken ON media(taken_at DESC);
     CREATE INDEX IF NOT EXISTS media_parent ON media(parent);
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY NOT NULL, value TEXT);
   `);
   const row = await conn.getFirstAsync<{ user_version: number }>('PRAGMA user_version', []);
-  if ((row?.user_version ?? 0) < SCHEMA_VERSION) await conn.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+  const version = row?.user_version ?? 0;
+  if (version < 2) await migrateToV2(conn);
+  if (version < SCHEMA_VERSION) await conn.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+  await conn.execAsync('CREATE INDEX IF NOT EXISTS media_md5 ON media(md5)');
   return conn;
+}
+
+/**
+ * v2 adds md5 / GPS / camera. Existing installs get the columns, then one full
+ * re-scan (rows stay visible meanwhile) so already-indexed photos gain the data.
+ */
+async function migrateToV2(conn: SQLite.SQLiteDatabase): Promise<void> {
+  const cols = await conn.getAllAsync<{ name: string }>('PRAGMA table_info(media)', []);
+  const have = new Set(cols.map((c) => c.name));
+  for (const [name, sqlType] of [
+    ['md5', 'TEXT'],
+    ['lat', 'REAL'],
+    ['lng', 'REAL'],
+    ['camera', 'TEXT'],
+  ] as const) {
+    if (!have.has(name)) await conn.execAsync(`ALTER TABLE media ADD COLUMN ${name} ${sqlType}`);
+  }
+  await conn.execAsync(
+    "DELETE FROM meta WHERE key IN ('full_sync_done', 'full_sync_page', 'full_sync_start', 'thumbs_at')"
+  );
 }
 
 interface Row {
@@ -64,6 +92,10 @@ interface Row {
   duration_ms: number | null;
   thumb: string | null;
   parent: string | null;
+  md5: string | null;
+  lat: number | null;
+  lng: number | null;
+  camera: string | null;
 }
 
 /** Same rewrite as drive.ts: Drive thumbnail links end in `=s220`. */
@@ -83,6 +115,10 @@ function toItem(r: Row): MediaItem {
     thumbnailUrl: sized(r.thumb, 600),
     previewUrl: sized(r.thumb, 2048),
     parents: r.parent ? [r.parent] : undefined,
+    md5: r.md5 ?? undefined,
+    lat: r.lat ?? undefined,
+    lng: r.lng ?? undefined,
+    camera: r.camera ?? undefined,
   };
 }
 
@@ -94,12 +130,13 @@ export async function upsertMedia(items: MediaItem[]): Promise<void> {
   const conn = await db();
   await conn.withExclusiveTransactionAsync(async (txn) => {
     const stmt = await txn.prepareAsync(
-      `INSERT INTO media (id, name, mime, kind, size, taken_at, width, height, duration_ms, thumb, parent)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO media (id, name, mime, kind, size, taken_at, width, height, duration_ms, thumb, parent, md5, lat, lng, camera)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name, mime = excluded.mime, kind = excluded.kind, size = excluded.size,
          taken_at = excluded.taken_at, width = excluded.width, height = excluded.height,
-         duration_ms = excluded.duration_ms, thumb = excluded.thumb, parent = excluded.parent`
+         duration_ms = excluded.duration_ms, thumb = excluded.thumb, parent = excluded.parent,
+         md5 = excluded.md5, lat = excluded.lat, lng = excluded.lng, camera = excluded.camera`
     );
     try {
       for (const i of items) {
@@ -115,6 +152,10 @@ export async function upsertMedia(items: MediaItem[]): Promise<void> {
           i.durationMs ?? null,
           bareThumb(i.thumbnailUrl),
           i.parents?.[0] ?? null,
+          i.md5 ?? null,
+          i.lat ?? null,
+          i.lng ?? null,
+          i.camera ?? null,
         ]);
       }
     } finally {

@@ -18,7 +18,9 @@ const MEDIA_QUERY =
   "(mimeType contains 'image/' or mimeType contains 'video/') and trashed = false";
 /** Per-file fields the app needs (shared by files.list, files.get and changes.list). */
 const FILE_FIELDS =
-  'id,name,mimeType,size,createdTime,imageMediaMetadata(time,width,height),videoMediaMetadata(width,height,durationMillis),thumbnailLink,parents,trashed';
+  'id,name,mimeType,size,md5Checksum,createdTime,' +
+  'imageMediaMetadata(time,width,height,location(latitude,longitude),cameraMake,cameraModel),' +
+  'videoMediaMetadata(width,height,durationMillis),thumbnailLink,parents,trashed';
 const FIELDS = `nextPageToken, files(${FILE_FIELDS})`;
 
 const MAX_RETRIES = 4;
@@ -34,7 +36,15 @@ export interface DriveFile {
   createdTime?: string;
   thumbnailLink?: string;
   parents?: string[];
-  imageMediaMetadata?: { time?: string; width?: number; height?: number };
+  md5Checksum?: string;
+  imageMediaMetadata?: {
+    time?: string;
+    width?: number;
+    height?: number;
+    location?: { latitude?: number; longitude?: number };
+    cameraMake?: string;
+    cameraModel?: string;
+  };
   videoMediaMetadata?: { width?: number; height?: number; durationMillis?: string };
 }
 
@@ -217,7 +227,18 @@ export function toMediaItem(f: DriveFile): MediaItem {
     thumbnailUrl: sized(f.thumbnailLink, 600),
     previewUrl: sized(f.thumbnailLink, 2048),
     parents: f.parents,
+    md5: f.md5Checksum,
+    lat: f.imageMediaMetadata?.location?.latitude,
+    lng: f.imageMediaMetadata?.location?.longitude,
+    camera: cameraName(f.imageMediaMetadata?.cameraMake, f.imageMediaMetadata?.cameraModel),
   };
+}
+
+/** Camera label for search. The model often already starts with the make, so don't repeat it. */
+function cameraName(make?: string, model?: string): string | undefined {
+  if (!model) return make || undefined;
+  if (!make || model.toLowerCase().startsWith(make.toLowerCase())) return model;
+  return `${make} ${model}`;
 }
 
 /** Drive thumbnail links end in `=s220`; swap in a larger size for sharp tiles / full view. */
