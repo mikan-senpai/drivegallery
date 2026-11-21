@@ -6,12 +6,20 @@
     "scheme": "drivegallery",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mikansenpai.drivegallery"
     },
     "android": {
-      "package": "com.mikansenpai.drivegallery"
+      "package": "com.mikansenpai.drivegallery",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#151413"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
@@ -23,7 +31,20 @@
           "iosUrlScheme": "com.googleusercontent.apps.YOUR_IOS_CLIENT_ID"
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#faf8f3",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#151413"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

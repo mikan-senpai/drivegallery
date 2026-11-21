@@ -1,75 +1,105 @@
 # DriveGallery
 
-A read-only, Google Photos–style gallery for the images and videos in your Google Drive. Built with **Expo (React Native)** for iOS and Android. Files stay in Drive — this is a viewer, not a backup tool.
+A Google Photos–style gallery for the images and videos already in your Google Drive. Built with **Expo (React Native)** for Android and iOS. Your files stay in Drive — the app is a viewer, with an on-device index so it opens instantly.
 
-Design: **Twilight Stillness**, minimal — Lora + Outfit type, squircle tiles, hairline cards, floating blur tab bar. Two themes: **Paper** (light, default) and **Twilight** (dark).
+Design: **Twilight Stillness** — Lora + Outfit type, liquid-glass tab bar, two themes: **Paper** (light) and **Twilight** (dark).
 
-See [`docs/PRD.md`](docs/PRD.md) for the full product spec.
+Specs: [`docs/PRD.md`](docs/PRD.md) · Privacy: [`docs/privacy.md`](docs/privacy.md)
 
-## Quick start
+## Features
+
+- Timeline grouped by day, **pinch to zoom** (2–6 per row), Samsung-style **fast scroller** with a date bubble
+- **Offline index** (SQLite + Drive Changes API): instant launch, whole-library scrolling, delta sync
+- **Folder selection**: show/hide Drive folders (subfolders included, exclusions supported)
+- Full-screen viewer: swipe, pinch/double-tap zoom, **video playback** (streams from Drive), info with folder path
+- **Multi-select** (long-press): share or move to Trash in bulk
+- **Favorites**, Drive-folder **Albums**, search by filename
+- Sign in with Google (read-only); edit access is requested only the first time you delete
+
+## Quick start (UI only, demo photos)
 
 ```bash
 npm install
-npx expo install --fix   # align native deps to this SDK
-npm start                # open in demo mode (mock photos, no sign-in)
+npm start
 ```
 
-Tap **"Explore with demo photos"** on the connect screen to browse the UI immediately in Expo Go. Real Google sign-in needs a native build (below).
+Open in Expo Go and tap **Explore with demo photos**. Real Google sign-in needs a development build (below).
 
-## Project structure
+## Development build
 
-```
-app/                     Expo Router routes
-  _layout.tsx            Providers, fonts, query client, error boundary
-  index.tsx              Connect / OAuth screen
-  (tabs)/                Photos · Albums · Search · You
-  photo/[id].tsx         Full-screen viewer (pinch-zoom)
-src/
-  theme/                 Tokens (Paper/Twilight) + ThemeProvider
-  lib/                   auth, drive (REST v3), grouping, format, types, mock
-  hooks/useMedia.ts      TanStack Query data access
-  store/session.ts       Session state (Zustand)
-  components/            FloatingTabBar, PhotoTile, ScreenHeader, …
-```
-
-## Development build (EAS)
-
-Native features (Google Sign-In, custom shaders) don't run in Expo Go. Build a development client in the cloud — no Android Studio needed:
+Native modules (Google Sign-In, sharing, SQLite) need your own build of the app instead of Expo Go. EAS builds it in the cloud — no Android Studio needed:
 
 ```bash
 npx eas-cli login
 npx eas-cli build --profile development --platform android
 ```
 
-Install the APK from the link EAS prints, then run `npm start` and open the project from the installed **DriveGallery** app instead of Expo Go.
+Install the APK from the link EAS prints, then:
 
-## Auth setup (real Drive)
+```bash
+npx expo start --dev-client
+```
 
-Google Sign-In does not run in Expo Go — use a development build.
+…and open the project from the installed **DriveGallery** app. Rebuild whenever a native module is added (JS changes hot-reload).
 
-1. **Google Cloud Console** → create OAuth client IDs (Web, iOS, Android). Enable the **Google Drive API**. Add scope `.../auth/drive.readonly`.
-2. Copy `.env.example` → `.env` and fill the client IDs.
-3. Set the iOS URL scheme in `app.json` (`iosUrlScheme`) to your reversed iOS client ID.
-4. Build and run a dev client:
-   ```bash
-   npx expo prebuild
-   npx expo run:ios      # or run:android
-   ```
+## Google sign-in setup
 
-The app requests **`drive.readonly`** only. Removing an item ("Move to Trash") needs the `drive.file` write scope, requested separately and on demand.
+In [Google Cloud Console](https://console.cloud.google.com) (Google Auth Platform):
 
-## Tech
+1. Enable the **Google Drive API**.
+2. **Data Access** → add scopes `.../auth/drive.readonly` and `.../auth/drive`.
+3. **Audience** → while in *Testing*, add every user's Gmail as a **test user** (max 100).
+4. **Clients** → create a **Web application** client (put its ID in `.env` as `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, and as an EAS env var for cloud builds) and an **Android** client with package `com.mikansenpai.drivegallery` and the SHA-1 from *expo.dev → project → Credentials → Android*.
 
-Expo Router · TypeScript (strict) · expo-image · FlashList · Reanimated + Gesture Handler · expo-secure-store (tokens) · TanStack Query · Zustand · @react-native-google-signin.
+## Releasing
 
-## Production checklist
+**Friends release (≤100 test users)** — an installable APK, no Play Store:
 
-- [ ] Google OAuth **verification** for restricted scopes (required before public release — allow lead time).
-- [ ] Swap demo data for live indexing: SQLite index + Drive **Changes API** delta sync (see PRD §Drive integration).
-- [ ] Thumbnail cache: FileSystem LRU keyed by `fileId+modifiedTime`; re-fetch expiring `thumbnailLink`s.
-- [ ] EAS Build + Submit config; app icons & splash.
-- [ ] Error monitoring (e.g. Sentry) and analytics for the PRD success metrics.
-- [ ] Unit tests for `grouping`, `format`, `drive` parsing; E2E smoke on connect → timeline → viewer.
+```bash
+npx eas-cli build --profile preview --platform android
+```
+
+Share the APK link; each friend's Gmail must be on the test-user list. Preview builds use the same signing key as development builds, so the existing Android OAuth client works.
+
+**Play Store** (`production` profile, AAB):
+
+```bash
+npx eas-cli build --profile production --platform android
+npx eas-cli submit --platform android
+```
+
+- Play **App Signing** re-signs the app with Google's key, which has a **different SHA-1**. Copy it from *Play Console → Setup → App signing* and create a **second Android OAuth client** with it, or sign-in fails in Play installs.
+- Above 100 users, Google requires **OAuth verification** for the restricted Drive scopes, including a third-party security assessment (CASA). Plan weeks of lead time.
+- The Play listing needs the privacy policy URL ([`docs/privacy.md`](docs/privacy.md), host it publicly) and the Data safety form (no data collected or shared off-device).
+
+Regenerate icons after editing the artwork: `node scripts/render-icons.mjs`.
+
+## Project structure
+
+```
+app/
+  _layout.tsx           Providers, fonts, theme, routes
+  connect.tsx           Sign in with Google / demo
+  (tabs)/               Photos (timeline) · Albums · Search · You
+  photo/[id].tsx        Viewer (swipe, zoom, video, share, trash, info)
+  album/[id].tsx        Album grid
+  folders.tsx           Folder show/hide picker
+src/
+  lib/                  auth, drive (REST v3), mediaIndex (SQLite), indexSync, folders, share, cache
+  hooks/useMedia.ts     Media/folder data for screens
+  store/                session, folder selection, favorites, grid prefs, selection
+  components/           GlassView, FloatingTabBar, FastScroller, PhotoTile, ZoomableImage, DriveVideo, …
+  theme/                Tokens (Paper/Twilight), ThemeProvider, blur target
+scripts/render-icons.mjs  Icon + splash artwork
+```
+
+## Checks
+
+```bash
+npx tsc --noEmit
+npx eslint app src
+npx -y expo-doctor
+```
 
 ## License
 
