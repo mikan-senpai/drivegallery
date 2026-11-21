@@ -39,8 +39,6 @@ import { trashItem } from '@/lib/drive';
 import { shareMedia } from '@/lib/share';
 import { saveToPhone } from '@/lib/save';
 import { useIndexStatus } from '@/lib/indexSync';
-import { buildMemories } from '@/lib/memories';
-import { MemoriesStrip, MEMORIES_H } from '@/components/MemoriesStrip';
 import { formatBytes } from '@/lib/format';
 import type { MediaItem } from '@/lib/types';
 import { monthLabel, type TimelineRow } from '@/lib/grouping';
@@ -86,9 +84,6 @@ export default function Timeline() {
   const favorites = useFavorites((s) => s.ids);
   const listRows = useMemo(() => toListRows(rows, filter, cols, favorites), [rows, filter, cols, favorites]);
 
-  // "On this day" strip above the grid (only on the All filter). Its fixed height feeds the row maths.
-  const memories = useMemo(() => (filter === 'all' ? buildMemories(items) : []), [items, filter]);
-  const memoriesH = memories.length ? MEMORIES_H : 0;
 
   const listRef = useRef<FlashListRef<ListRow>>(null);
   const scrollerRef = useRef<FastScrollerHandle>(null);
@@ -96,13 +91,13 @@ export default function Timeline() {
   // Start offset of every row. Row heights are fixed (DAY_H / tileSize), so this is exact.
   const rowOffsets = useMemo(() => {
     const offsets: number[] = new Array(listRows.length);
-    let y = headerH + memoriesH;
+    let y = headerH;
     for (let i = 0; i < listRows.length; i++) {
       offsets[i] = y;
       y += listRows[i].type === 'header' ? DAY_H : tileSize;
     }
     return offsets;
-  }, [listRows, headerH, memoriesH, tileSize]);
+  }, [listRows, headerH, tileSize]);
 
   /** Index of the row at the top of the visible area for a scroll offset. */
   const rowAt = useCallback(
@@ -487,16 +482,6 @@ export default function Timeline() {
                 <EmptyState icon="image" title="No photos found" hint="No images or videos in this Drive yet. Pull down to refresh." />
               )
             }
-            ListHeaderComponent={
-              memories.length ? (
-                <View style={styles.memories}>
-                  <MemoriesStrip
-                    memories={memories}
-                    onOpen={(m) => router.push({ pathname: '/album/[id]', params: { id: m.id } })}
-                  />
-                </View>
-              ) : undefined
-            }
             renderItem={({ item: row }) =>
               row.type === 'header' ? (
                 <Pressable
@@ -732,8 +717,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     minHeight: 64,
   },
-  // Bleed past the list's side gutter so cards can scroll edge to edge.
-  memories: { marginHorizontal: -GUTTER },
   dayRow: { height: DAY_H, flexDirection: 'row', alignItems: 'center', gap: 2 },
   dayCheck: {
     width: 18,
