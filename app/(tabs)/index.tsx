@@ -61,7 +61,7 @@ export default function Timeline() {
   const { palette } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height: screenH } = useWindowDimensions();
   const [filter, setFilter] = useState<MediaFilter>('all');
   const [headerH, setHeaderH] = useState(insets.top + 118);
   const demoMode = useSession((s) => s.demoMode);
@@ -128,6 +128,7 @@ export default function Timeline() {
   // Keep the photo you were looking at in place when the column count changes.
   const pendingAnchor = useRef<string | null>(null);
   const lastY = useRef(0);
+  const maxScroll = useRef(0);
 
   const changeCols = (delta: number) => {
     const next = Math.min(MAX_COLS, Math.max(MIN_COLS, cols + delta));
@@ -165,14 +166,26 @@ export default function Timeline() {
     .onFinalize(() => {
       pinchScale.set(withTiming(1, { duration: 180 }));
     });
+  const dragSelect = Gesture.Pan()
+    .activateAfterLongPress(300)
+    .onStart((e) => {
+      runOnJS(beginDrag)(e.x, e.y);
+    })
+    .onUpdate((e) => {
+      runOnJS(moveDrag)(e.x, e.y);
+    })
+    .onFinalize(() => {
+      runOnJS(endDrag)();
+    });
+  const gridGesture = Gesture.Simultaneous(pinch, dragSelect);
   /* eslint-enable react-hooks/refs */
   const gridStyle = useAnimatedStyle(() => ({ transform: [{ scale: pinchScale.get() }] }));
 
   // ---- Selection ----
   const selecting = useSelection((s) => s.active);
   const selectedIds = useSelection((s) => s.ids);
-  const startSelection = useSelection((s) => s.start);
   const toggleSelection = useSelection((s) => s.toggle);
+  const setSelectionIds = useSelection((s) => s.setIds);
   const clearSelection = useSelection((s) => s.clear);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const removeFromList = useRemoveMediaItem();
@@ -182,10 +195,120 @@ export default function Timeline() {
     if (selecting) toggleSelection(item.id);
     else router.push({ pathname: '/photo/[id]', params: { id: item.id } });
   };
-  const onTileLongPress = (item: MediaItem) => {
+
+  // ---- Drag to select: long-press a tile, then drag across others to select the range ----
+  /** Timeline items in display order + each one's position, for range selection. */
+  const order = useMemo(() => {
+    const list: MediaItem[] = [];
+    for (const r of listRows) if (r.type === 'row') list.push(...r.items);
+    return { list, pos: new Map(list.map((m, i) => [m.id, i])) };
+  }, [listRows]);
+
+  /** Item ids of each day, keyed by the day's header row id ("tap a date to select the day"). */
+  const dayItems = useMemo(() => {
+    const map = new Map<string, string[]>();
+    let current: string[] | null = null;
+    for (const r of listRows) {
+      if (r.type === 'header') {
+        current = [];
+        map.set(r.id, current);
+      } else if (current) {
+        current.push(...r.items.map((i) => i.id));
+      }
+    }
+    return map;
+  }, [listRows]);
+
+  /** The tile under a point in the grid's own coordinates (null over gaps and date headers). */
+  const itemAt = (x: number, y: number): MediaItem | null => {
+    const contentY = y + lastY.current;
+    let lo = 0;
+    let hi = rowOffsets.length - 1;
+    let at = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (rowOffsets[mid] <= contentY) {
+        at = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    const row = listRows[at];
+    if (!row || row.type !== 'row') return null;
+    const col = Math.min(cols - 1, Math.max(0, Math.floor((x - GUTTER) / tileSize)));
+    return row.items[Math.min(col, row.items.length - 1)] ?? null;
+  };
+
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<{ anchor: number; base: string[]; x: number; y: number } | null>(null);
+  const autoScroll = useRef<{ timer: ReturnType<typeof setInterval>; dir: number } | null>(null);
+
+  /** Selection = what was selected before the drag + everything between the anchor and the finger. */
+  const applyDrag = () => {
+    const d = drag.current;
+    if (!d) return;
+    const item = itemAt(d.x, d.y);
+    const at = item ? order.pos.get(item.id) : undefined;
+    if (at === undefined) return;
+    const [from, to] = at < d.anchor ? [at, d.anchor] : [d.anchor, at];
+    const range = order.list.slice(from, to + 1).map((i) => i.id);
+    setSelectionIds([...new Set([...d.base, ...range])]);
+  };
+
+  const stopAutoScroll = () => {
+    if (autoScroll.current) clearInterval(autoScroll.current.timer);
+    autoScroll.current = null;
+  };
+
+  const beginDrag = (x: number, y: number) => {
+    const item = itemAt(x, y);
+    const anchor = item ? order.pos.get(item.id) : undefined;
+    if (anchor === undefined) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (selecting) toggleSelection(item.id);
-    else startSelection(item.id);
+    const sel = useSelection.getState();
+    drag.current = { anchor, base: sel.active ? sel.ids : [], x, y };
+    setDragging(true);
+    applyDrag();
+  };
+
+  const moveDrag = (x: number, y: number) => {
+    const d = drag.current;
+    if (!d) return;
+    d.x = x;
+    d.y = y;
+    applyDrag();
+
+    // Holding near the top/bottom edge scrolls, and keeps extending the selection.
+    const dir = y < headerH + 24 ? -1 : y > screenH - (insets.bottom + 120) ? 1 : 0;
+    if (dir === autoScroll.current?.dir) return;
+    stopAutoScroll();
+    if (dir === 0) return;
+    autoScroll.current = {
+      dir,
+      timer: setInterval(() => {
+        const next = Math.min(maxScroll.current, Math.max(0, lastY.current + dir * 22));
+        if (next === lastY.current) return;
+        lastY.current = next; // keep hit-testing in step before onScroll reports back
+        listRef.current?.scrollToOffset({ offset: next, animated: false });
+        applyDrag();
+      }, 16),
+    };
+  };
+
+  const endDrag = () => {
+    drag.current = null;
+    stopAutoScroll();
+    setDragging(false);
+  };
+
+  /** While selecting, tapping a date header selects (or clears) that whole day. */
+  const toggleDay = (headerId: string) => {
+    const ids = dayItems.get(headerId) ?? [];
+    if (!ids.length) return;
+    Haptics.selectionAsync();
+    const current = useSelection.getState().ids;
+    const all = ids.every((id) => current.includes(id));
+    const dayIds = new Set(ids);
+    setSelectionIds(all ? current.filter((id) => !dayIds.has(id)) : [...new Set([...current, ...ids])]);
   };
 
   // Android back leaves selection mode; leaving the screen clears it.
@@ -285,6 +408,7 @@ export default function Timeline() {
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    maxScroll.current = Math.max(0, contentSize.height - layoutMeasurement.height);
     scrollerRef.current?.update(contentOffset.y, contentSize.height, layoutMeasurement.height);
     const y = contentOffset.y;
     const dy = y - lastY.current;
@@ -309,7 +433,7 @@ export default function Timeline() {
 
   return (
     <View style={[styles.container, { backgroundColor: palette.bg }]}>
-      <GestureDetector gesture={pinch}>
+      <GestureDetector gesture={gridGesture}>
         <Animated.View style={[styles.list, gridStyle]}>
           <FlashList
             ref={listRef}
@@ -317,7 +441,9 @@ export default function Timeline() {
             style={styles.list}
             keyExtractor={(r) => r.id}
             getItemType={(r) => r.type}
-            extraData={`${selecting}-${selectedIds.length}`}
+            extraData={selectedSet}
+            // Dragging to select owns the finger; edge auto-scroll still moves the list.
+            scrollEnabled={!dragging}
             onScroll={onScroll}
             scrollEventThrottle={16}
             contentContainerStyle={{ paddingTop: headerH, paddingHorizontal: GUTTER, paddingBottom: insets.bottom + 110 }}
@@ -341,9 +467,17 @@ export default function Timeline() {
             }
             renderItem={({ item: row }) =>
               row.type === 'header' ? (
-                <View style={styles.dayRow}>
+                <Pressable
+                  style={styles.dayRow}
+                  disabled={!selecting}
+                  onPress={() => toggleDay(row.id)}
+                  accessibilityLabel={selecting ? `Select all from ${row.label}` : undefined}
+                >
+                  {selecting ? (
+                    <DayCheck checked={(dayItems.get(row.id) ?? []).every((id) => selectedSet.has(id))} />
+                  ) : null}
                   <Text style={[type.uppercase, styles.day, { color: palette.fgVariant }]}>{row.label}</Text>
-                </View>
+                </Pressable>
               ) : (
                 <View style={styles.gridRow}>
                   {row.items.map((m) => (
@@ -352,7 +486,6 @@ export default function Timeline() {
                       item={m}
                       size={tileSize}
                       onPress={onTilePress}
-                      onLongPress={onTileLongPress}
                       selecting={selecting}
                       selected={selectedSet.has(m.id)}
                     />
@@ -460,6 +593,21 @@ export default function Timeline() {
   );
 }
 
+/** Check circle on a date header while selecting: filled when the whole day is selected. */
+function DayCheck({ checked }: { checked: boolean }) {
+  const { palette } = useTheme();
+  return (
+    <View
+      style={[
+        styles.dayCheck,
+        checked ? { backgroundColor: palette.primary, borderColor: palette.primary } : { borderColor: palette.fgVariant },
+      ]}
+    >
+      {checked ? <Feather name="check" size={11} color={palette.onPrimary} /> : null}
+    </View>
+  );
+}
+
 function ActionButton({
   icon,
   label,
@@ -545,7 +693,16 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     minHeight: 64,
   },
-  dayRow: { height: DAY_H, justifyContent: 'center' },
+  dayRow: { height: DAY_H, flexDirection: 'row', alignItems: 'center', gap: 2 },
+  dayCheck: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    marginLeft: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   day: { marginHorizontal: 6 },
   gridRow: { flexDirection: 'row' },
   actionWrap: { position: 'absolute', left: 22, right: 22 },

@@ -10,6 +10,8 @@ interface SelectionState {
   active: boolean;
   start: (id: string) => void;
   toggle: (id: string) => void;
+  /** Replace the whole selection (drag-to-select, select-a-day). */
+  setIds: (ids: string[]) => void;
   clear: () => void;
 }
 
@@ -23,5 +25,6 @@ export const useSelection = create<SelectionState>((set) => ({
       // Deselecting the last item leaves selection mode, like Samsung/Google Photos.
       return ids.length ? { ids } : { ids, active: false };
     }),
+  setIds: (ids) => set({ ids, active: ids.length > 0 }),
   clear: () => set({ ids: [], active: false }),
 }));

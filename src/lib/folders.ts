@@ -38,6 +38,14 @@ export type FolderState =
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
+/**
+ * Virtual folder holding every folder whose parent isn't visible from My Drive —
+ * "Shared with me", Drive-for-desktop "Computers" backups, folders whose parent
+ * you can't access. Without it those folders have no path to My Drive, so they
+ * can't be browsed in the Folders screen or hidden through a parent.
+ */
+export const OTHER_LOCATIONS_ID = '__other_locations__';
+
 /** Load every folder the user owns or can see in My Drive, plus the root id. */
 export async function loadFolderIndex(): Promise<FolderIndex> {
   const root = await driveFetchJson<{ id: string }>('/files/root?fields=id');
@@ -61,6 +69,13 @@ export async function loadFolderIndex(): Promise<FolderIndex> {
     pageToken = page.nextPageToken;
   } while (pageToken);
 
+  // Re-home folders that can't reach My Drive under the virtual "other locations" folder.
+  const orphans = [...byId.values()].filter((n) => n.id !== root.id && (!n.parent || !byId.has(n.parent)));
+  if (orphans.length) {
+    byId.set(OTHER_LOCATIONS_ID, { id: OTHER_LOCATIONS_ID, name: 'Shared & other locations', parent: root.id });
+    for (const n of orphans) n.parent = OTHER_LOCATIONS_ID;
+  }
+
   const children = new Map<string, DriveFolderNode[]>();
   for (const node of byId.values()) {
     if (!node.parent) continue;
@@ -69,6 +84,10 @@ export async function loadFolderIndex(): Promise<FolderIndex> {
     children.set(node.parent, list);
   }
   for (const list of children.values()) list.sort((a, b) => a.name.localeCompare(b.name));
+  // Keep the virtual folder last in My Drive's listing rather than sorted among real folders.
+  const top = children.get(root.id);
+  const other = top?.findIndex((n) => n.id === OTHER_LOCATIONS_ID) ?? -1;
+  if (top && other >= 0) top.push(...top.splice(other, 1));
 
   return { rootId: root.id, byId, children };
 }
