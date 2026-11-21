@@ -39,6 +39,7 @@ export default function Timeline() {
 
       <FlashList
         data={listRows}
+        style={styles.list}
         keyExtractor={(r) => r.id}
         getItemType={(r) => r.type}
         contentContainerStyle={{ paddingHorizontal: GUTTER, paddingBottom: insets.bottom + 110 }}
@@ -111,6 +112,7 @@ const padCells = (n: number): string[] =>
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  list: { flex: 1 },
   day: { marginHorizontal: 6, marginTop: spacing.sm, marginBottom: spacing.sm },
   gridRow: { flexDirection: 'row' },
 });

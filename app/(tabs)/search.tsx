@@ -54,6 +54,7 @@ export default function Search() {
       ) : (
         <FlashList
           data={rows}
+          style={{ flex: 1 }}
           keyExtractor={(_, i) => `r${i}`}
           contentContainerStyle={{ paddingHorizontal: GUTTER, paddingBottom: insets.bottom + 110 }}
           ListEmptyComponent={<EmptyState icon="image" title="No matches" hint={`Nothing named "${q}".`} />}

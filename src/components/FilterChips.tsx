@@ -18,6 +18,7 @@ export function FilterChips({ value, onChange }: { value: MediaFilter; onChange:
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={styles.scroll}
       contentContainerStyle={styles.row}
     >
       {OPTIONS.map((o) => {
@@ -43,8 +44,11 @@ export function FilterChips({ value, onChange }: { value: MediaFilter; onChange:
 }
 
 const styles = StyleSheet.create({
-  row: { gap: 7, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  // flexGrow:0 stops the horizontal ScrollView from expanding to fill the column.
+  scroll: { flexGrow: 0, flexShrink: 0 },
+  row: { gap: 7, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, alignItems: 'center' },
   chip: {
+    alignSelf: 'center',
     paddingHorizontal: 16,
     paddingVertical: 7,
     borderRadius: radius.full,
