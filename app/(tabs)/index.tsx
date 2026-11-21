@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, useWindowDimensions, RefreshControl, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions, RefreshControl, Pressable } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -22,18 +21,37 @@ const GUTTER = 14;
 type ListRow = { type: 'header'; id: string; label: string } | { type: 'row'; id: string; items: MediaItem[] };
 
 export default function Timeline() {
-  const { palette, name } = useTheme();
+  const { palette } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [filter, setFilter] = useState<MediaFilter>('all');
-  const [headerH, setHeaderH] = useState(insets.top + 120);
 
   const { rows, items, isLoading, hasMore, loadMore, refetch } = useTimeline();
   const tileSize = (width - GUTTER * 2) / COLS;
 
   const listRows = useMemo(() => toListRows(rows, filter), [rows, filter]);
   const open = (item: MediaItem) => router.push({ pathname: '/photo/[id]', params: { id: item.id } });
+
+  // Title + chips live in the list header, so they scroll away and return at the top.
+  const ListHeader = (
+    <View style={[styles.header, { paddingTop: insets.top + spacing.xs }]}>
+      <ScreenHeader
+        title="Photos"
+        subtitle={`${items.length.toLocaleString()} in Drive`}
+        right={
+          <Pressable
+            onPress={() => router.push('/settings')}
+            hitSlop={8}
+            style={[styles.gear, { backgroundColor: palette.surface, borderColor: palette.border }]}
+          >
+            <Feather name="settings" size={16} color={palette.fg} />
+          </Pressable>
+        }
+      />
+      <FilterChips value={filter} onChange={setFilter} />
+    </View>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: palette.bg }]}>
@@ -42,8 +60,9 @@ export default function Timeline() {
         style={styles.list}
         keyExtractor={(r) => r.id}
         getItemType={(r) => r.type}
-        contentContainerStyle={{ paddingTop: headerH, paddingHorizontal: GUTTER, paddingBottom: insets.bottom + 110 }}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={refetch} tintColor={palette.fgVariant} progressViewOffset={headerH} />}
+        ListHeaderComponent={ListHeader}
+        contentContainerStyle={{ paddingHorizontal: GUTTER, paddingBottom: insets.bottom + 110 }}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={refetch} tintColor={palette.fgVariant} progressViewOffset={insets.top} />}
         onEndReachedThreshold={0.6}
         onEndReached={() => hasMore && loadMore()}
         ListEmptyComponent={
@@ -65,31 +84,12 @@ export default function Timeline() {
         }
       />
 
-      {/* Frosted header the grid scrolls under, with a soft fade at its edge. */}
-      <View
-        style={styles.headerWrap}
-        pointerEvents="box-none"
-        onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
-      >
-        <BlurView
-          intensity={48}
-          tint={name === 'twilight' ? 'dark' : 'light'}
-          experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
-          style={[styles.glass, { paddingTop: insets.top, backgroundColor: palette.bar }]}
-        >
-          <ScreenHeader
-            title="Photos"
-            subtitle={`${items.length.toLocaleString()} in Drive`}
-            right={
-              <Pressable onPress={() => router.push('/settings')} hitSlop={8} style={[styles.gear, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                <Feather name="settings" size={16} color={palette.fg} />
-              </Pressable>
-            }
-          />
-          <FilterChips value={filter} onChange={setFilter} />
-        </BlurView>
-        <LinearGradient colors={[palette.bg, 'transparent']} style={styles.fade} pointerEvents="none" />
-      </View>
+      {/* Fixed status-bar scrim: keeps the clock/battery legible as photos scroll under. */}
+      <LinearGradient
+        colors={[palette.bg, palette.bg + '00']}
+        style={[styles.topScrim, { height: insets.top + 18 }]}
+        pointerEvents="none"
+      />
 
       {/* Fade the grid out behind the floating tab bar. */}
       <LinearGradient
@@ -145,9 +145,9 @@ const padCells = (n: number): string[] =>
 const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { flex: 1 },
-  headerWrap: { position: 'absolute', top: 0, left: 0, right: 0 },
-  glass: { overflow: 'hidden' },
-  fade: { height: 22 },
+  // Cancel the list's horizontal gutter so the header uses its own padding.
+  header: { marginHorizontal: -GUTTER },
+  topScrim: { position: 'absolute', top: 0, left: 0, right: 0 },
   bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   gear: {
     width: 34,
