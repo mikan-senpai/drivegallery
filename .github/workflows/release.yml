@@ -1,0 +1,59 @@
+# Build the Android APK on EAS and publish it as a GitHub Release.
+#
+# Trigger: push a version tag, e.g.
+#   git tag v0.1.1 && git push origin v0.1.1
+#
+# One-time setup: add an Expo access token as the repo secret EXPO_TOKEN
+# (expo.dev → Account settings → Access tokens), e.g. `gh secret set EXPO_TOKEN`.
+# Each run uses one EAS build from your plan's quota.
+name: Release APK
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build APK on EAS (preview profile)
+        id: build
+        run: |
+          eas build --profile preview --platform android --non-interactive --wait --json > build.json
+          url=$(jq -r '.[0].artifacts.applicationArchiveUrl' build.json)
+          if [ -z "$url" ] || [ "$url" = "null" ]; then echo "No artifact URL"; cat build.json; exit 1; fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Download APK
+        run: curl -fsSL -o "DriveGallery-${GITHUB_REF_NAME}.apk" "${{ steps.build.outputs.url }}"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: DriveGallery ${{ github.ref_name }}
+          files: DriveGallery-*.apk
+          generate_release_notes: true
+          body: |
+            **Install:** download `DriveGallery-${{ github.ref_name }}.apk` below on your Android phone and open it
+            (allow installs from your browser when asked).
+
+            Sign-in works for Gmail accounts on the app's Google test-user list.
