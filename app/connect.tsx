@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { Redirect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { radius, spacing, type } from '@/theme/tokens';
 import { useSession } from '@/store/session';
 import { NativeUnavailableError } from '@/lib/auth';
+import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 
 const FEATURES = [
   { icon: 'shield' as const, text: 'Read-only access. Revoke anytime from Google.' },
@@ -64,20 +65,7 @@ export default function Connect() {
       </View>
 
       <View style={styles.actions}>
-        <Pressable
-          style={[styles.cta, { backgroundColor: palette.primary }]}
-          onPress={onConnect}
-          disabled={busy}
-        >
-          {busy ? (
-            <ActivityIndicator color={palette.onPrimary} />
-          ) : (
-            <>
-              <Feather name="log-in" size={18} color={palette.onPrimary} />
-              <Text style={[type.label, { color: palette.onPrimary }]}>Connect Google Drive</Text>
-            </>
-          )}
-        </Pressable>
+        <GoogleSignInButton onPress={onConnect} busy={busy} />
         <Pressable onPress={enterDemo} hitSlop={10} style={styles.demo}>
           <Text style={[type.caption, { color: palette.fgVariant }]}>Explore with demo photos</Text>
         </Pressable>

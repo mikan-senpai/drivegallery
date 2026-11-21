@@ -36,8 +36,9 @@ interface DriveFile {
 }
 
 async function driveFetch(path: string, init?: RequestInit): Promise<Response> {
+  let refreshed = false;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const token = await getValidAccessToken();
+    const token = await getValidAccessToken(refreshed);
     if (!token) throw new DriveAuthError('Not authenticated');
 
     const res = await fetch(`${API}${path}`, {
@@ -46,7 +47,12 @@ async function driveFetch(path: string, init?: RequestInit): Promise<Response> {
     });
 
     if (res.ok) return res;
-    if (res.status === 401) throw new DriveAuthError('Token rejected');
+    if (res.status === 401) {
+      // Token expired or revoked server-side: refresh once, then give up.
+      if (refreshed) throw new DriveAuthError('Token rejected');
+      refreshed = true;
+      continue;
+    }
     if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES) {
       await delay(backoffMs(attempt, res.headers.get('Retry-After')));
       continue;
@@ -125,9 +131,16 @@ function toMediaItem(f: DriveFile): MediaItem {
     durationMs: f.videoMediaMetadata?.durationMillis
       ? Number(f.videoMediaMetadata.durationMillis)
       : undefined,
-    thumbnailUrl: f.thumbnailLink,
+    thumbnailUrl: sized(f.thumbnailLink, 600),
+    previewUrl: sized(f.thumbnailLink, 2048),
     parents: f.parents,
   };
+}
+
+/** Drive thumbnail links end in `=s220`; swap in a larger size for sharp tiles / full view. */
+function sized(link: string | undefined, px: number): string | undefined {
+  if (!link) return undefined;
+  return /=s\d+$/.test(link) ? link.replace(/=s\d+$/, `=s${px}`) : `${link}=s${px}`;
 }
 
 /** EXIF time is "YYYY:MM:DD HH:MM:SS"; createdTime is ISO 8601. */

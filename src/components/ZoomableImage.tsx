@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Image } from 'expo-image';
+import { Image, type ImageSource } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
@@ -11,14 +11,16 @@ import Animated, {
 const AnimatedImage = Animated.createAnimatedComponent(Image);
 
 interface Props {
-  uri?: string;
+  source: ImageSource;
+  /** Shown instantly while `source` loads (e.g. the cached grid thumbnail). */
+  placeholder?: ImageSource;
   width: number;
   height: number;
   /** Fires when this page becomes zoomed / unzoomed, so the pager can lock. */
   onZoomChange?: (zoomed: boolean) => void;
 }
 
-export function ZoomableImage({ uri, width, height, onZoomChange }: Props) {
+export function ZoomableImage({ source, placeholder, width, height, onZoomChange }: Props) {
   const scale = useSharedValue(1);
   const saved = useSharedValue(1);
   const tx = useSharedValue(0);
@@ -87,7 +89,15 @@ export function ZoomableImage({ uri, width, height, onZoomChange }: Props) {
 
   return (
     <GestureDetector gesture={gesture}>
-      <AnimatedImage source={uri} style={[{ width, height }, animated]} contentFit="contain" transition={120} />
+      <AnimatedImage
+        source={source}
+        placeholder={placeholder}
+        placeholderContentFit="contain"
+        cachePolicy="memory-disk"
+        style={[{ width, height }, animated]}
+        contentFit="contain"
+        transition={120}
+      />
     </GestureDetector>
   );
 }

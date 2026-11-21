@@ -11,7 +11,10 @@ export interface MediaItem {
   width?: number;
   height?: number;
   durationMs?: number;
+  /** Grid-sized thumbnail. */
   thumbnailUrl?: string;
+  /** Large preview for the full-screen viewer (falls back to thumbnailUrl). */
+  previewUrl?: string;
   parents?: string[];
   favorite?: boolean;
 }

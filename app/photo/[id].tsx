@@ -8,6 +8,7 @@ import { useMediaItems } from '@/hooks/useMedia';
 import { trashItem } from '@/lib/drive';
 import { useSession } from '@/store/session';
 import { formatBytes, formatDate } from '@/lib/format';
+import { useAuthHeaders } from '@/lib/tokenStore';
 import { type as typeTokens } from '@/theme/tokens';
 import type { MediaItem } from '@/lib/types';
 
@@ -17,6 +18,7 @@ export default function Viewer() {
   const demoMode = useSession((s) => s.demoMode);
   const { items } = useMediaItems();
   const { width, height } = useWindowDimensions();
+  const headers = useAuthHeaders();
   const listRef = useRef<FlatList<MediaItem>>(null);
 
   const initialIndex = useMemo(() => Math.max(0, items.findIndex((i) => i.id === id)), [items, id]);
@@ -74,7 +76,12 @@ export default function Viewer() {
         renderItem={({ item }) => (
           <View style={{ width, height, alignItems: 'center', justifyContent: 'center' }}>
             <ZoomableImage
-              uri={item.thumbnailUrl}
+              source={{
+                uri: item.previewUrl ?? item.thumbnailUrl,
+                headers,
+                cacheKey: `${item.id}-full`,
+              }}
+              placeholder={item.thumbnailUrl ? { uri: item.thumbnailUrl, headers, cacheKey: `${item.id}-grid` } : undefined}
               width={width}
               height={height}
               onZoomChange={(z) => setScrollEnabled(!z)}

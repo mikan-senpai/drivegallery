@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import { radius } from '@/theme/tokens';
 import { formatDuration } from '@/lib/format';
+import { useAuthHeaders } from '@/lib/tokenStore';
 import type { MediaItem } from '@/lib/types';
 
 interface Props {
@@ -13,11 +14,14 @@ interface Props {
 }
 
 function PhotoTileBase({ item, size, onPress }: Props) {
+  const headers = useAuthHeaders();
   return (
     <Pressable onPress={() => onPress(item)} style={{ width: size, height: size, padding: 2.5 }}>
       <View style={styles.inner}>
         <Image
-          source={item.thumbnailUrl}
+          // Drive thumbnail URLs rotate every few hours, so cache by file id, not URL.
+          source={item.thumbnailUrl ? { uri: item.thumbnailUrl, headers, cacheKey: `${item.id}-grid` } : undefined}
+          cachePolicy="memory-disk"
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={160}
