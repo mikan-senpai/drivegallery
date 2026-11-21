@@ -57,7 +57,7 @@ async function driveFetch(path: string, init?: RequestInit): Promise<Response> {
       await delay(backoffMs(attempt, res.headers.get('Retry-After')));
       continue;
     }
-    throw new Error(`Drive API ${res.status}: ${await safeText(res)}`);
+    throw new Error(await errorMessage(res));
   }
   throw new Error('Drive API: retries exhausted');
 }
@@ -163,10 +163,15 @@ function backoffMs(attempt: number, retryAfter: string | null): number {
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-async function safeText(res: Response): Promise<string> {
+/** Google API errors are JSON `{ error: { message } }`; surface just the human message. */
+async function errorMessage(res: Response): Promise<string> {
+  let body = '';
   try {
-    return (await res.text()).slice(0, 200);
+    body = await res.text();
+    const message = (JSON.parse(body) as { error?: { message?: string } }).error?.message;
+    if (message) return message;
   } catch {
-    return '';
+    // Not JSON — fall through to the raw text.
   }
+  return `Drive request failed (${res.status})${body ? `: ${body.slice(0, 160)}` : ''}`;
 }

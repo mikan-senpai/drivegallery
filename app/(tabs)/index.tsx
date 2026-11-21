@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -41,7 +41,12 @@ export default function Timeline() {
   const [filter, setFilter] = useState<MediaFilter>('all');
   const [headerH, setHeaderH] = useState(insets.top + 118);
 
-  const { rows, items, isLoading, hasMore, loadMore, refetch } = useTimeline();
+  const { rows, items, isLoading, error, hasMore, loadMore, refetch } = useTimeline();
+  const errorMessage = error ? (error instanceof Error ? error.message : String(error)) : null;
+
+  useEffect(() => {
+    if (errorMessage) console.warn('[Drive] failed to load media:', errorMessage);
+  }, [errorMessage]);
   const tileSize = (width - GUTTER * 2) / COLS;
   const listRows = useMemo(() => toListRows(rows, filter), [rows, filter]);
   const open = (item: MediaItem) => router.push({ pathname: '/photo/[id]', params: { id: item.id } });
@@ -88,7 +93,13 @@ export default function Timeline() {
         onEndReachedThreshold={0.6}
         onEndReached={() => hasMore && loadMore()}
         ListEmptyComponent={
-          isLoading ? null : <EmptyState icon="image" title="No photos yet" hint="Pull to refresh once your Drive is indexed." />
+          isLoading ? (
+            <EmptyState icon="loader" title="Loading your Drive…" />
+          ) : errorMessage ? (
+            <EmptyState icon="alert-circle" title="Couldn't load your Drive" hint={`${errorMessage}\n\nPull down to retry.`} />
+          ) : (
+            <EmptyState icon="image" title="No photos found" hint="No images or videos in this Drive yet. Pull down to refresh." />
+          )
         }
         renderItem={({ item: row }) =>
           row.type === 'header' ? (
