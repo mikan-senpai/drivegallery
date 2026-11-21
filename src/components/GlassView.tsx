@@ -34,14 +34,20 @@ export function GlassView({ children, style, radius = 28, intensity = 80, blurTa
 
   const androidBlur = Platform.OS === 'android' && blurTarget;
 
+  // On Android, `intensity` drives BOTH the blur radius (intensity / reductionFactor)
+  // and an opaque tint overlay (alpha ≈ intensity × 0.7). A high intensity buries the
+  // blur under a near-solid grey. So keep intensity low (faint tint) and lower the
+  // reduction factor to keep a visible ~15px blur.
+  const isAndroid = Platform.OS === 'android';
+
   return (
     <View style={[{ borderRadius: radius, overflow: 'hidden' }, style]}>
       <BlurView
-        intensity={intensity}
+        intensity={isAndroid ? 18 : intensity}
         tint={tint}
         blurMethod={androidBlur ? 'dimezisBlurView' : 'none'}
         blurTarget={androidBlur ? blurTarget : undefined}
-        blurReductionFactor={2.5}
+        blurReductionFactor={1.2}
         style={StyleSheet.absoluteFill}
       />
       {/* Light tint — low opacity so the blurred content shows through. */}

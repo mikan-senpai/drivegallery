@@ -119,13 +119,8 @@ export default function Timeline() {
         pointerEvents="box-none"
         onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
       >
-        <LinearGradient
-          colors={[palette.bg, palette.bg, palette.bg + '00']}
-          locations={[0, 0.62, 1]}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        <View style={{ paddingTop: insets.top + spacing.xs, paddingBottom: spacing.sm }}>
+        {/* Solid behind title + chips so list content never shows through the controls. */}
+        <View style={{ paddingTop: insets.top + spacing.xs, paddingBottom: spacing.xs, backgroundColor: palette.bg }}>
           <ScreenHeader
             title="Photos"
             subtitle={`${items.length.toLocaleString()} in Drive`}
@@ -141,6 +136,8 @@ export default function Timeline() {
           />
           <FilterChips value={filter} onChange={setFilter} />
         </View>
+        {/* The fade lives below the controls: photos dissolve into the header here. */}
+        <LinearGradient colors={[palette.bg, palette.bg + '00']} style={styles.headerFade} pointerEvents="none" />
       </Animated.View>
     </View>
   );
@@ -192,6 +189,7 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   headerWrap: { position: 'absolute', top: 0, left: 0, right: 0 },
   topScrim: { position: 'absolute', top: 0, left: 0, right: 0 },
+  headerFade: { height: 26 },
   gear: { width: 38, height: 38 },
   gearInner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   day: { marginHorizontal: 6, marginTop: spacing.sm, marginBottom: spacing.sm },
