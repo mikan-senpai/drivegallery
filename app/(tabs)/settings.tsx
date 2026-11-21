@@ -60,6 +60,7 @@ export default function Settings() {
 
         <Section title="Library" palette={palette}>
           <Row palette={palette} icon="folder" label="Folders to show" onPress={() => router.push('/folders')} />
+          <Row palette={palette} icon="hard-drive" label="Free up space" onPress={() => router.push('/cleanup')} />
         </Section>
 
         <Section title="Storage" palette={palette}>

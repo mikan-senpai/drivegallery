@@ -1,8 +1,10 @@
 /**
  * Albums = smart albums (Favorites, Videos) + one album per Drive folder that
- * directly contains media. Album ids: 'favorites', 'videos', or a Drive folder id.
+ * directly contains media. Album ids: 'favorites', 'videos', a Drive folder id, or
+ * `range:<start>-<end>` (a time span, used by memories).
  */
 import type { FolderIndex } from './folders';
+import { parseRangeAlbum, rangeTitle } from './memories';
 import type { MediaItem } from './types';
 
 export const FAVORITES_ALBUM = 'favorites';
@@ -22,6 +24,8 @@ export interface FolderAlbum {
 export function itemsInAlbum(items: MediaItem[], albumId: string, favorites: Record<string, true>): MediaItem[] {
   if (albumId === FAVORITES_ALBUM) return items.filter((i) => favorites[i.id]);
   if (albumId === VIDEOS_ALBUM) return items.filter((i) => i.kind === 'video');
+  const range = parseRangeAlbum(albumId);
+  if (range) return items.filter((i) => i.takenAt >= range.start && i.takenAt < range.end);
   return items.filter((i) => i.parents?.[0] === albumId);
 }
 
@@ -67,5 +71,7 @@ function parentPath(folderId: string, index: FolderIndex): string {
 export function albumTitle(albumId: string, index: FolderIndex | undefined): string {
   if (albumId === FAVORITES_ALBUM) return 'Favorites';
   if (albumId === VIDEOS_ALBUM) return 'Videos';
+  const range = parseRangeAlbum(albumId);
+  if (range) return rangeTitle(range.start, range.end);
   return index?.byId.get(albumId)?.name ?? 'Album';
 }
