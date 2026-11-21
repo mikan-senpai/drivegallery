@@ -24,7 +24,13 @@ const TOKEN_KEY = 'google.tokens';
 const TOKEN_TTL_MS = 55 * 60 * 1000;
 
 /** Read-only Drive access — all that sign-in asks for. */
-export const SCOPES_READONLY = ['https://www.googleapis.com/auth/drive.readonly'];
+export const SCOPE_APPDATA = 'https://www.googleapis.com/auth/drive.appdata';
+/**
+ * Asked at sign-in: read-only Drive, plus the app's private settings storage
+ * (drive.appdata — can't see any of your files) so hidden folders, the Locked
+ * folder and favorites follow your account across phones and reinstalls.
+ */
+export const SCOPES_READONLY = ['https://www.googleapis.com/auth/drive.readonly', SCOPE_APPDATA];
 /** Edit access, requested only the first time the user deletes something. */
 export const SCOPE_DRIVE_EDIT = 'https://www.googleapis.com/auth/drive';
 
@@ -127,6 +133,31 @@ export async function getValidAccessToken(force = false): Promise<string | null>
  * Incremental auth: make sure the user has granted Drive edit access, asking
  * Google for it only if they haven't. Returns false if they decline.
  */
+/** Whether the signed-in user already granted the app's private settings storage. */
+export function hasAppDataAccess(): boolean {
+  try {
+    return gsi().GoogleSignin.getCurrentUser()?.scopes.includes(SCOPE_APPDATA) ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Incremental auth for accounts that signed in before settings sync existed:
+ * ask once for the private settings storage. Returns false if they decline.
+ */
+export async function ensureAppDataAccess(): Promise<boolean> {
+  const { GoogleSignin, isSuccessResponse } = gsi();
+  configure();
+  // After a cold start the native session may not be restored yet; addScopes needs it.
+  if (!GoogleSignin.getCurrentUser() && GoogleSignin.hasPreviousSignIn()) await GoogleSignin.signInSilently();
+  if (hasAppDataAccess()) return true;
+  const response = await GoogleSignin.addScopes({ scopes: [SCOPE_APPDATA] });
+  if (!response || !isSuccessResponse(response)) return false;
+  await getValidAccessToken(true);
+  return true;
+}
+
 export async function ensureWriteAccess(): Promise<boolean> {
   const { GoogleSignin, isSuccessResponse } = gsi();
   configure();

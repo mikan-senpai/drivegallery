@@ -10,6 +10,7 @@ import type { ThemePreference } from '@/theme/ThemeProvider';
 import { useSession } from '@/store/session';
 import { clearMediaCaches } from '@/lib/cache';
 import { formatBytes } from '@/lib/format';
+import { enableSettingsSync, useSettingsSync } from '@/lib/settingsSync';
 
 const THEME_OPTIONS: { key: ThemePreference; label: string }[] = [
   { key: 'paper', label: 'Paper' },
@@ -61,6 +62,7 @@ export default function Settings() {
         <Section title="Library" palette={palette}>
           <Row palette={palette} icon="folder" label="Folders to show" onPress={() => router.push('/folders')} />
           <Row palette={palette} icon="hard-drive" label="Free up space" onPress={() => router.push('/cleanup')} />
+          {!demoMode ? <SyncRow palette={palette} /> : null}
         </Section>
 
         <Section title="Storage" palette={palette}>
@@ -139,3 +141,41 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
 });
+
+/**
+ * Settings sync status. On: hidden folders, Locked folder and favorites follow
+ * your Google account. Off (signed in before sync existed): tap to turn on.
+ */
+function SyncRow({ palette }: { palette: any }) {
+  const { enabled, syncing, lastSynced, error } = useSettingsSync();
+  const detail =
+    enabled === false
+      ? 'Off · tap to keep hidden folders and favorites with your account'
+      : syncing
+        ? 'Syncing…'
+        : error
+          ? "Couldn't sync · will retry"
+          : lastSynced
+            ? `On · synced ${new Date(lastSynced).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
+            : 'On';
+
+  const onPress = async () => {
+    if (enabled !== false) return;
+    const ok = await enableSettingsSync();
+    if (!ok) Alert.alert('Sync not turned on', 'DriveGallery needs permission to keep its settings in your Google account.');
+  };
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={enabled !== false}
+      style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]}
+    >
+      <Feather name="refresh-cw" size={18} color={enabled === false ? palette.fgVariant : palette.primary} />
+      <View style={{ flex: 1 }}>
+        <Text style={[type.bodyMd, { color: palette.fg }]}>Sync settings to Google</Text>
+        <Text style={[type.caption, { color: palette.fgVariant }]}>{detail}</Text>
+      </View>
+    </Pressable>
+  );
+}

@@ -9,6 +9,7 @@ import { useFonts, Lora_400Regular, Lora_500Medium } from '@expo-google-fonts/lo
 import { Outfit_300Light, Outfit_400Regular, Outfit_500Medium } from '@expo-google-fonts/outfit';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { useSession } from '@/store/session';
+import { startSettingsSync } from '@/lib/settingsSync';
 
 export { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -18,6 +19,13 @@ const queryClient = new QueryClient({
 
 function Navigator() {
   const { palette, name } = useTheme();
+  const sessionStatus = useSession((s) => s.status);
+  const demoMode = useSession((s) => s.demoMode);
+
+  // Hidden folders, Locked folder and favorites follow the signed-in account.
+  useEffect(() => {
+    if (sessionStatus === 'signedIn' && !demoMode) void startSettingsSync();
+  }, [sessionStatus, demoMode]);
 
   useEffect(() => {
     void SystemUI.setBackgroundColorAsync(palette.bg);

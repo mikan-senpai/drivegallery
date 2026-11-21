@@ -14,6 +14,7 @@ import { getValidAccessToken } from './auth';
 import type { DriveFolder, MediaItem, Page } from './types';
 
 const API = 'https://www.googleapis.com/drive/v3';
+const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
 const MEDIA_QUERY =
   "(mimeType contains 'image/' or mimeType contains 'video/') and trashed = false";
 /** Per-file fields the app needs (shared by files.list, files.get and changes.list). */
@@ -54,7 +55,7 @@ async function driveFetch(path: string, init?: RequestInit): Promise<Response> {
     const token = await getValidAccessToken(refreshed);
     if (!token) throw new DriveAuthError('Not authenticated');
 
-    const res = await fetch(`${API}${path}`, {
+    const res = await fetch(path.startsWith('https://') ? path : `${API}${path}`, {
       ...init,
       headers: { Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
     });
@@ -115,6 +116,56 @@ export async function authHeader(): Promise<Record<string, string>> {
   const token = await getValidAccessToken();
   if (!token) throw new DriveAuthError('Not authenticated');
   return { Authorization: `Bearer ${token}` };
+}
+
+// ---- App data folder (private per-app storage; settings sync) ----
+
+/** Id of a file in the app's private appDataFolder, or null. */
+export async function appDataFind(name: string): Promise<string | null> {
+  const params = new URLSearchParams({
+    spaces: 'appDataFolder',
+    q: `name = '${name.replace(/'/g, "\\'")}' and trashed = false`,
+    fields: 'files(id)',
+    pageSize: '1',
+  });
+  const json = await driveFetchJson<{ files?: { id: string }[] }>(`/files?${params.toString()}`);
+  return json.files?.[0]?.id ?? null;
+}
+
+export async function appDataRead<T>(id: string): Promise<T> {
+  return driveFetchJson<T>(`/files/${id}?alt=media`);
+}
+
+/** Create (no id) or overwrite a JSON file in appDataFolder. Returns its id. */
+export async function appDataWrite(name: string, data: unknown, id?: string | null): Promise<string> {
+  const body = JSON.stringify(data);
+  if (id) {
+    await driveFetch(`${UPLOAD_API}/files/${id}?uploadType=media`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+    return id;
+  }
+  // multipart/related: part 1 = metadata, part 2 = content. Lines must end in CRLF.
+  const boundary = `dg-${Date.now()}`;
+  const multipart = [
+    `--${boundary}`,
+    'Content-Type: application/json; charset=UTF-8',
+    '',
+    JSON.stringify({ name, parents: ['appDataFolder'] }),
+    `--${boundary}`,
+    'Content-Type: application/json',
+    '',
+    body,
+    `--${boundary}--`,
+  ].join('\r\n');
+  const res = await driveFetch(`${UPLOAD_API}/files?uploadType=multipart&fields=id`, {
+    method: 'POST',
+    headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+    body: multipart,
+  });
+  return ((await res.json()) as { id: string }).id;
 }
 
 // ---- Changes API (incremental sync for the offline index) ----
