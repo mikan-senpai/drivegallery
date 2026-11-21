@@ -32,6 +32,7 @@ function Navigator() {
         <Stack.Screen name="folders" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="album/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="cleanup" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="locked" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="photo/[id]" options={{ presentation: 'transparentModal', animation: 'fade' }} />
       </Stack>
     </>

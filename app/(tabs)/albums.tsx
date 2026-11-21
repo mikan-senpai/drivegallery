@@ -12,6 +12,7 @@ import { radius, spacing, type } from '@/theme/tokens';
 import { useFolderIndex, useMediaItems } from '@/hooks/useMedia';
 import { useFavorites } from '@/store/favorites';
 import { useFolderSelection } from '@/store/folderSelection';
+import { useLocked } from '@/store/locked';
 import { useAuthHeaders } from '@/lib/tokenStore';
 import { buildFolderAlbums, FAVORITES_ALBUM, VIDEOS_ALBUM, type FolderAlbum } from '@/lib/albums';
 import type { MediaItem } from '@/lib/types';
@@ -39,14 +40,24 @@ export default function Albums() {
   const open = (id: string) => router.push({ pathname: '/album/[id]', params: { id } });
 
   // Hiding an album = excluding its Drive folder, so its photos leave Photos and Search too.
-  const hideAlbum = (album: FolderAlbum) => {
+  const lockFolder = useLocked((s) => s.lock);
+
+  // Long-press an album: hide it, or move it behind fingerprint unlock. Nothing changes in Drive.
+  const albumActions = (album: FolderAlbum) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
-      `Hide "${album.name}"?`,
-      'Its photos will also be hidden from Photos and Search, along with any folders inside it. Nothing is deleted from Drive — unhide it anytime under Hidden albums.',
+      album.name,
+      'Hide it, or move it to the Locked folder (opens with your fingerprint). Either way its photos leave Photos and Search, along with any folders inside it. Nothing is deleted from Drive.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Hide', style: 'destructive', onPress: () => setRule('exclude', album.id, true) },
+        { text: 'Hide', onPress: () => setRule('exclude', album.id, true) },
+        {
+          text: 'Lock',
+          onPress: () => {
+            lockFolder(album.id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          },
+        },
       ]
     );
   };
@@ -80,9 +91,19 @@ export default function Albums() {
                 onPress={() => open(VIDEOS_ALBUM)}
               />
             </View>
+            <Pressable
+              onPress={() => router.push('/locked')}
+              style={[styles.lockedRow, { backgroundColor: palette.surface, borderColor: palette.border }]}
+            >
+              <View style={[styles.lockedIcon, { backgroundColor: palette.primary + '22' }]}>
+                <Feather name="lock" size={16} color={palette.primary} />
+              </View>
+              <Text style={[type.bodyMd, { color: palette.fg, flex: 1 }]}>Locked folder</Text>
+              <Feather name="chevron-right" size={18} color={palette.fgVariant} />
+            </Pressable>
             <View style={styles.sectionRow}>
               <Text style={[type.uppercase, { color: palette.fgVariant }]}>Drive folders</Text>
-              <Text style={[type.caption, { color: palette.fgVariant }]}>Long-press to hide</Text>
+              <Text style={[type.caption, { color: palette.fgVariant }]}>Long-press to hide or lock</Text>
             </View>
           </View>
         }
@@ -123,7 +144,7 @@ export default function Albums() {
             album={item}
             width={cardW}
             onPress={() => open(item.id)}
-            onLongPress={() => hideAlbum(item)}
+            onLongPress={() => albumActions(item)}
           />
         )}
       />
@@ -223,6 +244,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginTop: spacing.md,
   },
+  lockedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: spacing.lg,
+    padding: 10,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  lockedIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   sectionRowFlat: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
   hiddenWrap: { marginTop: spacing.xl, gap: spacing.sm },
   hiddenRow: {

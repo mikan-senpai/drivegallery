@@ -5,7 +5,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ZoomableImage } from '@/components/ZoomableImage';
 import { DriveVideo } from '@/components/DriveVideo';
-import { useMediaItems, useRemoveMediaItem } from '@/hooks/useMedia';
+import { useLockedItems, useMediaItems, useRemoveMediaItem } from '@/hooks/useMedia';
+import { LOCKED_ALBUM } from '@/store/locked';
 import { getFolderPath, mediaUrl, trashItem } from '@/lib/drive';
 import { AuthCancelledError, ensureWriteAccess } from '@/lib/auth';
 import { shareMedia } from '@/lib/share';
@@ -22,12 +23,18 @@ export default function Viewer() {
   const { id, album } = useLocalSearchParams<{ id: string; album?: string }>();
   const router = useRouter();
   const demoMode = useSession((s) => s.demoMode);
-  const { items: allItems } = useMediaItems();
+  const { items: libraryItems } = useMediaItems();
+  // Locked photos aren't in the library; opened from the Locked folder, read them from there.
+  const locked = useLockedItems(album === LOCKED_ALBUM);
+  const allItems = useMemo(
+    () => (album === LOCKED_ALBUM ? (locked.data ?? []) : libraryItems),
+    [album, locked.data, libraryItems]
+  );
   // Opened from an album → swipe within that album. Favorites are snapshotted at
   // open time so un-hearting a photo doesn't yank it out from under you.
   const [favoritesAtOpen] = useState(() => useFavorites.getState().ids);
   const items = useMemo(
-    () => (album ? itemsInAlbum(allItems, album, favoritesAtOpen) : allItems),
+    () => (album && album !== LOCKED_ALBUM ? itemsInAlbum(allItems, album, favoritesAtOpen) : allItems),
     [allItems, album, favoritesAtOpen]
   );
   const { width, height } = useWindowDimensions();

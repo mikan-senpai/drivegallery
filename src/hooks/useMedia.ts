@@ -19,6 +19,7 @@ import { queryMedia } from '@/lib/mediaIndex';
 import { ensureSynced, removeFromIndex, syncIndex, useIndexStatus } from '@/lib/indexSync';
 import { useSession } from '@/store/session';
 import { useFolderSelection } from '@/store/folderSelection';
+import { useLocked } from '@/store/locked';
 import type { MediaItem } from '@/lib/types';
 
 /** The user's Drive folder tree (cached 10 min). */
@@ -41,7 +42,13 @@ export function useMediaItems(): {
   refetch: () => void;
 } {
   const demoMode = useSession((s) => s.demoMode);
-  const selection = useFolderSelection(useShallow((s) => ({ include: s.include, exclude: s.exclude })));
+  const chosen = useFolderSelection(useShallow((s) => ({ include: s.include, exclude: s.exclude })));
+  const lockedFolders = useLocked((s) => s.folders);
+  // Locked folders are excluded everywhere, exactly like hidden ones.
+  const selection = useMemo(
+    () => ({ include: chosen.include, exclude: [...new Set([...chosen.exclude, ...lockedFolders])] }),
+    [chosen, lockedFolders]
+  );
   const scoped = selection.include.length > 0 || selection.exclude.length > 0;
   const folderIndex = useFolderIndex(scoped);
   const { version, phase, error: syncError } = useIndexStatus(
@@ -130,4 +137,23 @@ export function useRemoveMediaItem(): (ids: string | string[]) => void {
     },
     [queryClient]
   );
+}
+
+/**
+ * Media inside the Locked folder (locked folders and their subfolders).
+ * Only queried while `enabled` — i.e. after the user has unlocked.
+ */
+export function useLockedItems(enabled: boolean) {
+  const locked = useLocked((s) => s.folders);
+  const folderIndex = useFolderIndex(enabled && locked.length > 0);
+  const version = useIndexStatus((s) => s.version);
+  return useQuery({
+    queryKey: ['locked', locked.join(','), version],
+    enabled: enabled && locked.length > 0 && folderIndex.isSuccess,
+    queryFn: async () => {
+      const scope = resolveScope({ include: locked, exclude: [] }, folderIndex.data);
+      const allowed = scope.mode === 'folders' ? scope.allowed : [];
+      return queryMedia({ mode: 'folders', allowed: [...new Set([...allowed, ...locked])] });
+    },
+  });
 }
