@@ -10,6 +10,7 @@ import { Outfit_300Light, Outfit_400Regular, Outfit_500Medium } from '@expo-goog
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { useSession } from '@/store/session';
 import { startSettingsSync } from '@/lib/settingsSync';
+import { CrashReportGate } from '@/components/CrashReportGate';
 
 export { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -34,6 +35,7 @@ function Navigator() {
   return (
     <>
       <StatusBar style={name === 'twilight' ? 'light' : 'dark'} />
+      <CrashReportGate />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.bg } }}>
         <Stack.Screen name="connect" />
         <Stack.Screen name="(tabs)" />

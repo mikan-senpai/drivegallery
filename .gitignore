@@ -11,8 +11,8 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
-ios/
-android/
+/ios/
+/android/
 
 # Dependencies
 node_modules/
