@@ -7,6 +7,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import * as Haptics from 'expo-haptics';
 import { GlassView } from '@/components/GlassView';
 import { useBlurTarget } from '@/theme/BlurTarget';
+import { useSelection } from '@/store/selection';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius } from '@/theme/tokens';
 
@@ -33,6 +34,7 @@ export function FloatingTabBar() {
   const router = useRouter();
   const pathname = usePathname();
   const blurTarget = useBlurTarget();
+  const selecting = useSelection((s) => s.active);
   const [barWidth, setBarWidth] = useState(0);
 
   const activeIndex = Math.max(0, TABS.findIndex((t) => t.path === pathname));
@@ -44,6 +46,9 @@ export function FloatingTabBar() {
   }, [activeIndex, itemW, lensX]);
 
   const lensStyle = useAnimatedStyle(() => ({ transform: [{ translateX: lensX.value }] }));
+
+  // The Photos screen shows its selection actions in this spot while selecting.
+  if (selecting) return null;
 
   return (
     <View style={[styles.wrap, { bottom: insets.bottom + 18 }]} pointerEvents="box-none">

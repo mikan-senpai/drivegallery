@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,14 +6,19 @@ import {
   useWindowDimensions,
   RefreshControl,
   Pressable,
+  Alert,
+  BackHandler,
+  ActivityIndicator,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { FilterChips, type MediaFilter } from '@/components/FilterChips';
@@ -22,18 +27,29 @@ import { EmptyState } from '@/components/EmptyState';
 import { GlassView } from '@/components/GlassView';
 import { FastScroller, type FastScrollerHandle } from '@/components/FastScroller';
 import { useTheme } from '@/theme/ThemeProvider';
-import { spacing, type } from '@/theme/tokens';
-import { useTimeline } from '@/hooks/useMedia';
+import { radius, spacing, type } from '@/theme/tokens';
+import { useRemoveMediaItem, useTimeline } from '@/hooks/useMedia';
 import { useFolderSelection } from '@/store/folderSelection';
+import { useSelection } from '@/store/selection';
+import { MAX_COLS, MIN_COLS, useGridPrefs } from '@/store/gridPrefs';
+import { useSession } from '@/store/session';
+import { AuthCancelledError, ensureWriteAccess } from '@/lib/auth';
+import { trashItem } from '@/lib/drive';
+import { shareMedia } from '@/lib/share';
+import { formatBytes } from '@/lib/format';
 import type { MediaItem } from '@/lib/types';
 import { monthLabel, type TimelineRow } from '@/lib/grouping';
 
-const COLS = 3;
 const GUTTER = 14;
 /** Fixed date-header height, so scroll offsets map exactly onto rows (fast scroller). */
 const DAY_H = 34;
 /** Scroll distance (px) in one direction before the header reacts — avoids jitter. */
 const SCROLL_THRESHOLD = 8;
+/** Pinch scale past which the grid steps one column (out: bigger, in: smaller). */
+const PINCH_OUT = 1.18;
+const PINCH_IN = 0.85;
+/** Ask before sharing more than this much data (it's downloaded first). */
+const SHARE_CONFIRM_BYTES = 150 * 1024 * 1024;
 
 type ListRow =
   | { type: 'header'; id: string; label: string; ts: number }
@@ -46,6 +62,7 @@ export default function Timeline() {
   const { width } = useWindowDimensions();
   const [filter, setFilter] = useState<MediaFilter>('all');
   const [headerH, setHeaderH] = useState(insets.top + 118);
+  const demoMode = useSession((s) => s.demoMode);
 
   const { rows, items, isLoading, error, hasMore, loadMore, refetch } = useTimeline();
   const foldersScoped = useFolderSelection((s) => s.include.length > 0 || s.exclude.length > 0);
@@ -54,9 +71,12 @@ export default function Timeline() {
   useEffect(() => {
     if (errorMessage) console.warn('[Drive] failed to load media:', errorMessage);
   }, [errorMessage]);
-  const tileSize = (width - GUTTER * 2) / COLS;
-  const listRows = useMemo(() => toListRows(rows, filter), [rows, filter]);
-  const open = (item: MediaItem) => router.push({ pathname: '/photo/[id]', params: { id: item.id } });
+
+  // ---- Grid density (pinch to zoom) ----
+  const cols = useGridPrefs((s) => s.cols);
+  const stepCols = useGridPrefs((s) => s.step);
+  const tileSize = (width - GUTTER * 2) / cols;
+  const listRows = useMemo(() => toListRows(rows, filter, cols), [rows, filter, cols]);
 
   const listRef = useRef<FlashListRef<ListRow>>(null);
   const scrollerRef = useRef<FastScrollerHandle>(null);
@@ -72,30 +92,191 @@ export default function Timeline() {
     return offsets;
   }, [listRows, headerH, tileSize]);
 
+  /** Index of the row at the top of the visible area for a scroll offset. */
+  const rowAt = useCallback(
+    (offset: number): number => {
+      const target = offset + headerH;
+      let lo = 0;
+      let hi = rowOffsets.length - 1;
+      let at = -1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (rowOffsets[mid] <= target) {
+          at = mid;
+          lo = mid + 1;
+        } else hi = mid - 1;
+      }
+      return at;
+    },
+    [rowOffsets, headerH]
+  );
+
   /** Month of the row at the top of the visible area for a scroll offset. */
   const labelForOffset = (offset: number): string | null => {
-    const target = offset + headerH;
-    let lo = 0;
-    let hi = rowOffsets.length - 1;
-    let at = -1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >> 1;
-      if (rowOffsets[mid] <= target) {
-        at = mid;
-        lo = mid + 1;
-      } else hi = mid - 1;
-    }
-    for (let i = at; i >= 0; i--) {
+    for (let i = rowAt(offset); i >= 0; i--) {
       const r = listRows[i];
       if (r.type === 'header') return monthLabel(r.ts);
     }
     return null;
   };
 
-  // Header visibility: 1 = shown, 0 = hidden. Hide on scroll down, reveal on scroll up.
-  const shown = useSharedValue(1);
+  // Keep the photo you were looking at in place when the column count changes.
+  const pendingAnchor = useRef<string | null>(null);
   const lastY = useRef(0);
+
+  const changeCols = (delta: number) => {
+    const next = Math.min(MAX_COLS, Math.max(MIN_COLS, cols + delta));
+    if (next === cols) return;
+    for (let i = Math.max(0, rowAt(lastY.current)); i < listRows.length; i++) {
+      const r = listRows[i];
+      if (r.type === 'row') {
+        pendingAnchor.current = r.items[0].id;
+        break;
+      }
+    }
+    Haptics.selectionAsync();
+    stepCols(delta);
+  };
+
+  useEffect(() => {
+    const id = pendingAnchor.current;
+    if (!id) return;
+    pendingAnchor.current = null;
+    const idx = listRows.findIndex((r) => r.type === 'row' && r.items.some((i) => i.id === id));
+    if (idx >= 0) listRef.current?.scrollToOffset({ offset: Math.max(0, rowOffsets[idx] - headerH), animated: false });
+  }, [listRows, rowOffsets, headerH]);
+
+  const pinchScale = useSharedValue(1);
+  // Pinch previews the zoom (gently scaling the grid), then snaps to a new column count.
+  /* eslint-disable react-hooks/refs -- gesture callbacks run on the UI thread at gesture time, not during render */
+  const pinch = Gesture.Pinch()
+    .onUpdate((e) => {
+      pinchScale.set(Math.min(1.12, Math.max(0.9, e.scale)));
+    })
+    .onEnd((e) => {
+      if (e.scale > PINCH_OUT) runOnJS(changeCols)(-1);
+      else if (e.scale < PINCH_IN) runOnJS(changeCols)(1);
+    })
+    .onFinalize(() => {
+      pinchScale.set(withTiming(1, { duration: 180 }));
+    });
+  /* eslint-enable react-hooks/refs */
+  const gridStyle = useAnimatedStyle(() => ({ transform: [{ scale: pinchScale.get() }] }));
+
+  // ---- Selection ----
+  const selecting = useSelection((s) => s.active);
+  const selectedIds = useSelection((s) => s.ids);
+  const startSelection = useSelection((s) => s.start);
+  const toggleSelection = useSelection((s) => s.toggle);
+  const clearSelection = useSelection((s) => s.clear);
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const removeFromList = useRemoveMediaItem();
+  const [busy, setBusy] = useState<'share' | 'trash' | null>(null);
+
+  const onTilePress = (item: MediaItem) => {
+    if (selecting) toggleSelection(item.id);
+    else router.push({ pathname: '/photo/[id]', params: { id: item.id } });
+  };
+  const onTileLongPress = (item: MediaItem) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (selecting) toggleSelection(item.id);
+    else startSelection(item.id);
+  };
+
+  // Android back leaves selection mode; leaving the screen clears it.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (!useSelection.getState().active) return false;
+        useSelection.getState().clear();
+        return true;
+      });
+      return () => {
+        sub.remove();
+        useSelection.getState().clear();
+      };
+    }, [])
+  );
+
+  const selectedItems = () => items.filter((i) => selectedSet.has(i.id));
+
+  const shareSelected = async () => {
+    const picked = selectedItems();
+    if (!picked.length || busy) return;
+    const total = picked.reduce((sum, i) => sum + (i.sizeBytes ?? 0), 0);
+    const go = async () => {
+      setBusy('share');
+      try {
+        await shareMedia(picked, { demo: demoMode });
+        clearSelection();
+      } catch (e) {
+        Alert.alert('Could not share', e instanceof Error ? e.message : 'Try again.');
+      } finally {
+        setBusy(null);
+      }
+    };
+    if (total > SHARE_CONFIRM_BYTES) {
+      Alert.alert('Large download', `Sharing these ${picked.length} items downloads ${formatBytes(total)} first.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Share', onPress: () => void go() },
+      ]);
+    } else {
+      await go();
+    }
+  };
+
+  const trashSelected = () => {
+    const picked = selectedItems();
+    if (!picked.length || busy) return;
+    const n = picked.length;
+    Alert.alert(
+      `Move ${n} item${n > 1 ? 's' : ''} to Trash?`,
+      'They go to your Google Drive Trash. You can restore them from Drive for 30 days.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Move to Trash',
+          style: 'destructive',
+          onPress: async () => {
+            if (demoMode) {
+              removeFromList(picked.map((i) => i.id));
+              clearSelection();
+              return;
+            }
+            setBusy('trash');
+            try {
+              // First delete asks Google for edit access; sign-in itself stays read-only.
+              if (!(await ensureWriteAccess())) return;
+              const results = await Promise.allSettled(picked.map((i) => trashItem(i.id)));
+              const done = picked.filter((_, i) => results[i].status === 'fulfilled').map((i) => i.id);
+              removeFromList(done);
+              clearSelection();
+              const failed = n - done.length;
+              if (failed) Alert.alert('Some items were not moved', `${failed} of ${n} couldn't be moved to Trash. Try again.`);
+            } catch (e) {
+              if (!(e instanceof AuthCancelledError)) {
+                Alert.alert('Could not move to Trash', e instanceof Error ? e.message : 'Try again.');
+              }
+            } finally {
+              setBusy(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // ---- Auto-hiding header: hide on scroll down, reveal on scroll up ----
+  const shown = useSharedValue(1);
   const shownRef = useRef(1);
+
+  useEffect(() => {
+    // Selection controls live in the header, so keep it on screen while selecting.
+    if (selecting && shownRef.current !== 1) {
+      shownRef.current = 1;
+      shown.set(withTiming(1, { duration: 200 }));
+    }
+  }, [selecting, shown]);
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
@@ -103,6 +284,7 @@ export default function Timeline() {
     const y = contentOffset.y;
     const dy = y - lastY.current;
     lastY.current = y;
+    if (selecting) return;
 
     let target = shownRef.current;
     if (y < 12) target = 1;
@@ -111,57 +293,70 @@ export default function Timeline() {
 
     if (target !== shownRef.current) {
       shownRef.current = target;
-      shown.value = withTiming(target, { duration: 240 });
+      shown.set(withTiming(target, { duration: 240 }));
     }
   };
 
   const headerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(shown.value, [0, 1], [-(headerH + 12), 0]) }],
-    opacity: shown.value,
+    transform: [{ translateY: interpolate(shown.get(), [0, 1], [-(headerH + 12), 0]) }],
+    opacity: shown.get(),
   }));
 
   return (
     <View style={[styles.container, { backgroundColor: palette.bg }]}>
-      <FlashList
-        ref={listRef}
-        data={listRows}
-        style={styles.list}
-        keyExtractor={(r) => r.id}
-        getItemType={(r) => r.type}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        contentContainerStyle={{ paddingTop: headerH, paddingHorizontal: GUTTER, paddingBottom: insets.bottom + 110 }}
-        refreshControl={
-          <RefreshControl refreshing={false} onRefresh={refetch} tintColor={palette.fgVariant} progressViewOffset={headerH} />
-        }
-        onEndReachedThreshold={0.6}
-        onEndReached={() => hasMore && loadMore()}
-        ListEmptyComponent={
-          isLoading ? (
-            <EmptyState icon="loader" title="Loading your Drive…" />
-          ) : errorMessage ? (
-            <EmptyState icon="alert-circle" title="Couldn't load your Drive" hint={`${errorMessage}\n\nPull down to retry.`} />
-          ) : (
-            <EmptyState icon="image" title="No photos found" hint="No images or videos in this Drive yet. Pull down to refresh." />
-          )
-        }
-        renderItem={({ item: row }) =>
-          row.type === 'header' ? (
-            <View style={styles.dayRow}>
-              <Text style={[type.uppercase, styles.day, { color: palette.fgVariant }]}>{row.label}</Text>
-            </View>
-          ) : (
-            <View style={styles.gridRow}>
-              {row.items.map((m) => (
-                <PhotoTile key={m.id} item={m} size={tileSize} onPress={open} />
-              ))}
-              {padCells(row.items.length).map((k) => (
-                <View key={k} style={{ width: tileSize, height: tileSize }} />
-              ))}
-            </View>
-          )
-        }
-      />
+      <GestureDetector gesture={pinch}>
+        <Animated.View style={[styles.list, gridStyle]}>
+          <FlashList
+            ref={listRef}
+            data={listRows}
+            style={styles.list}
+            keyExtractor={(r) => r.id}
+            getItemType={(r) => r.type}
+            extraData={`${selecting}-${selectedIds.length}`}
+            onScroll={onScroll}
+            scrollEventThrottle={16}
+            contentContainerStyle={{ paddingTop: headerH, paddingHorizontal: GUTTER, paddingBottom: insets.bottom + 110 }}
+            refreshControl={
+              <RefreshControl refreshing={false} onRefresh={refetch} tintColor={palette.fgVariant} progressViewOffset={headerH} />
+            }
+            onEndReachedThreshold={0.6}
+            onEndReached={() => hasMore && loadMore()}
+            ListEmptyComponent={
+              isLoading ? (
+                <EmptyState icon="loader" title="Loading your Drive…" />
+              ) : errorMessage ? (
+                <EmptyState icon="alert-circle" title="Couldn't load your Drive" hint={`${errorMessage}\n\nPull down to retry.`} />
+              ) : (
+                <EmptyState icon="image" title="No photos found" hint="No images or videos in this Drive yet. Pull down to refresh." />
+              )
+            }
+            renderItem={({ item: row }) =>
+              row.type === 'header' ? (
+                <View style={styles.dayRow}>
+                  <Text style={[type.uppercase, styles.day, { color: palette.fgVariant }]}>{row.label}</Text>
+                </View>
+              ) : (
+                <View style={styles.gridRow}>
+                  {row.items.map((m) => (
+                    <PhotoTile
+                      key={m.id}
+                      item={m}
+                      size={tileSize}
+                      onPress={onTilePress}
+                      onLongPress={onTileLongPress}
+                      selecting={selecting}
+                      selected={selectedSet.has(m.id)}
+                    />
+                  ))}
+                  {padCells(row.items.length, cols).map((k) => (
+                    <View key={k} style={{ width: tileSize, height: tileSize }} />
+                  ))}
+                </View>
+              )
+            }
+          />
+        </Animated.View>
+      </GestureDetector>
 
       {/* Status-bar scrim — keeps the clock legible while the header is hidden. */}
       <LinearGradient
@@ -170,38 +365,49 @@ export default function Timeline() {
         pointerEvents="none"
       />
 
-      {/* Auto-hiding header: gradient fade behind title, chips and a glass gear. */}
+      {/* Auto-hiding header: title, chips and actions — or selection controls while selecting. */}
       <Animated.View
         style={[styles.headerWrap, headerStyle]}
         pointerEvents="box-none"
         onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
       >
-        {/* Solid behind title + chips so list content never shows through the controls. */}
+        {/* Solid behind the controls so list content never shows through them. */}
         <View style={{ paddingTop: insets.top + spacing.xs, paddingBottom: spacing.xs, backgroundColor: palette.bg }}>
-          <ScreenHeader
-            title="Photos"
-            subtitle={`${items.length.toLocaleString()} in Drive`}
-            right={
-              <View style={styles.headerActions}>
-                {/* Folder filter — a dot marks that only some folders are shown. */}
-                <Pressable onPress={() => router.push('/folders')} hitSlop={8} accessibilityLabel="Choose folders">
-                  <GlassView radius={19} style={styles.gear}>
-                    <View style={styles.gearInner}>
-                      <Feather name="folder" size={17} color={palette.fg} />
-                    </View>
-                  </GlassView>
-                  {foldersScoped ? <View style={[styles.dot, { backgroundColor: palette.primary }]} /> : null}
-                </Pressable>
-                <Pressable onPress={() => router.push('/settings')} hitSlop={8} accessibilityLabel="Settings">
-                  <GlassView radius={19} style={styles.gear}>
-                    <View style={styles.gearInner}>
-                      <Feather name="settings" size={17} color={palette.fg} />
-                    </View>
-                  </GlassView>
-                </Pressable>
-              </View>
-            }
-          />
+          {selecting ? (
+            <View style={styles.selectBar}>
+              <Pressable onPress={clearSelection} hitSlop={10} accessibilityLabel="Cancel selection">
+                <Feather name="x" size={24} color={palette.fg} />
+              </Pressable>
+              <Text style={[type.headlineLg, { color: palette.fg }]}>
+                {selectedIds.length} selected
+              </Text>
+            </View>
+          ) : (
+            <ScreenHeader
+              title="Photos"
+              subtitle={`${items.length.toLocaleString()} in Drive`}
+              right={
+                <View style={styles.headerActions}>
+                  {/* Folder filter — a dot marks that only some folders are shown. */}
+                  <Pressable onPress={() => router.push('/folders')} hitSlop={8} accessibilityLabel="Choose folders">
+                    <GlassView radius={19} style={styles.gear}>
+                      <View style={styles.gearInner}>
+                        <Feather name="folder" size={17} color={palette.fg} />
+                      </View>
+                    </GlassView>
+                    {foldersScoped ? <View style={[styles.dot, { backgroundColor: palette.primary }]} /> : null}
+                  </Pressable>
+                  <Pressable onPress={() => router.push('/settings')} hitSlop={8} accessibilityLabel="Settings">
+                    <GlassView radius={19} style={styles.gear}>
+                      <View style={styles.gearInner}>
+                        <Feather name="settings" size={17} color={palette.fg} />
+                      </View>
+                    </GlassView>
+                  </Pressable>
+                </View>
+              }
+            />
+          )}
           <FilterChips value={filter} onChange={setFilter} />
         </View>
         {/* The fade lives below the controls: photos dissolve into the header here. */}
@@ -216,18 +422,59 @@ export default function Timeline() {
         onSeek={(offset) => listRef.current?.scrollToOffset({ offset, animated: false })}
         labelForOffset={labelForOffset}
       />
+
+      {/* Selection actions take the tab bar's place while selecting. */}
+      {selecting ? (
+        <View style={[styles.actionWrap, { bottom: insets.bottom + 18 }]}>
+          <View style={[styles.actionBar, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <ActionButton
+              icon="share"
+              label={busy === 'share' ? 'Preparing…' : 'Share'}
+              busy={busy === 'share'}
+              onPress={shareSelected}
+            />
+            <View style={[styles.divider, { backgroundColor: palette.border }]} />
+            <ActionButton
+              icon="trash-2"
+              label={busy === 'trash' ? 'Moving…' : 'Move to Trash'}
+              busy={busy === 'trash'}
+              onPress={trashSelected}
+            />
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function toListRows(rows: TimelineRow[], filter: MediaFilter): ListRow[] {
+function ActionButton({
+  icon,
+  label,
+  busy,
+  onPress,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  busy?: boolean;
+  onPress: () => void;
+}) {
+  const { palette } = useTheme();
+  return (
+    <Pressable onPress={onPress} disabled={busy} style={styles.action} hitSlop={6}>
+      {busy ? <ActivityIndicator size="small" color={palette.fg} /> : <Feather name={icon} size={20} color={palette.fg} />}
+      <Text style={[type.label, { color: palette.fg }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function toListRows(rows: TimelineRow[], filter: MediaFilter, cols: number): ListRow[] {
   const out: ListRow[] = [];
   let bucket: MediaItem[] = [];
   let headerId = '';
 
   const flush = () => {
-    for (let i = 0; i < bucket.length; i += COLS) {
-      out.push({ type: 'row', id: `${headerId}-r${i}`, items: bucket.slice(i, i + COLS) });
+    for (let i = 0; i < bucket.length; i += cols) {
+      out.push({ type: 'row', id: `${headerId}-c${cols}-r${i}`, items: bucket.slice(i, i + cols) });
     }
     bucket = [];
   };
@@ -258,8 +505,8 @@ function matches(item: MediaItem, filter: MediaFilter): boolean {
   }
 }
 
-const padCells = (n: number): string[] =>
-  Array.from({ length: (COLS - (n % COLS)) % COLS }, (_, i) => `pad-${i}`);
+const padCells = (n: number, cols: number): string[] =>
+  Array.from({ length: (cols - (n % cols)) % cols }, (_, i) => `pad-${i}`);
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -271,7 +518,32 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', gap: 10 },
   dot: { position: 'absolute', top: 1, right: 1, width: 9, height: 9, borderRadius: 5 },
   gearInner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  selectBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    minHeight: 64,
+  },
   dayRow: { height: DAY_H, justifyContent: 'center' },
   day: { marginHorizontal: 6 },
   gridRow: { flexDirection: 'row' },
+  actionWrap: { position: 'absolute', left: 22, right: 22 },
+  actionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+  },
+  action: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10 },
+  divider: { width: StyleSheet.hairlineWidth, height: 28 },
 });

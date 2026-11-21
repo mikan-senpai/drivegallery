@@ -8,6 +8,7 @@ import { DriveVideo } from '@/components/DriveVideo';
 import { useMediaItems, useRemoveMediaItem } from '@/hooks/useMedia';
 import { getFolderPath, mediaUrl, trashItem } from '@/lib/drive';
 import { AuthCancelledError, ensureWriteAccess } from '@/lib/auth';
+import { shareMedia } from '@/lib/share';
 import { useSession } from '@/store/session';
 import { formatBytes, formatDate, formatDuration } from '@/lib/format';
 import { useAuthHeaders } from '@/lib/tokenStore';
@@ -58,6 +59,19 @@ export default function Viewer() {
         },
       },
     ]);
+  };
+
+  const [sharing, setSharing] = useState(false);
+  const onShare = async () => {
+    if (!current || sharing) return;
+    setSharing(true);
+    try {
+      await shareMedia([current], { demo: demoMode });
+    } catch (e) {
+      Alert.alert('Could not share', e instanceof Error ? e.message : 'Try again.');
+    } finally {
+      setSharing(false);
+    }
   };
 
   const info = async () => {
@@ -146,7 +160,7 @@ export default function Viewer() {
         pointerEvents="box-none"
         onLayout={(e) => setChromeBottom(e.nativeEvent.layout.height)}
       >
-        <Action icon="share" label="Share" onPress={() => Alert.alert('Share', 'Native share sheet (stub).')} />
+        <Action icon="share" label={sharing ? 'Preparing…' : 'Share'} onPress={onShare} />
         <Action icon="heart" label="Favorite" onPress={() => Alert.alert('Favorite', 'Toggled (stub).')} />
         <Action icon="info" label="Info" onPress={info} />
         <Action icon="trash-2" label="Remove" onPress={onRemove} />
