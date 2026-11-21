@@ -37,6 +37,7 @@ import { useSession } from '@/store/session';
 import { AuthCancelledError, ensureWriteAccess } from '@/lib/auth';
 import { trashItem } from '@/lib/drive';
 import { shareMedia } from '@/lib/share';
+import { useIndexStatus } from '@/lib/indexSync';
 import { formatBytes } from '@/lib/format';
 import type { MediaItem } from '@/lib/types';
 import { monthLabel, type TimelineRow } from '@/lib/grouping';
@@ -67,6 +68,8 @@ export default function Timeline() {
 
   const { rows, items, isLoading, error, hasMore, loadMore, refetch } = useTimeline();
   const foldersScoped = useFolderSelection((s) => s.include.length > 0 || s.exclude.length > 0);
+  const indexPhase = useIndexStatus((s) => s.phase);
+  const indexedCount = useIndexStatus((s) => s.indexed);
   const errorMessage = error ? (error instanceof Error ? error.message : String(error)) : null;
 
   useEffect(() => {
@@ -325,7 +328,11 @@ export default function Timeline() {
             onEndReached={() => hasMore && loadMore()}
             ListEmptyComponent={
               isLoading ? (
-                <EmptyState icon="loader" title="Loading your Drive…" />
+                <EmptyState
+                  icon="loader"
+                  title="Indexing your Drive…"
+                  hint="The first time takes a moment. After this, your photos open instantly."
+                />
               ) : errorMessage ? (
                 <EmptyState icon="alert-circle" title="Couldn't load your Drive" hint={`${errorMessage}\n\nPull down to retry.`} />
               ) : (
@@ -387,7 +394,11 @@ export default function Timeline() {
           ) : (
             <ScreenHeader
               title="Photos"
-              subtitle={`${items.length.toLocaleString()} in Drive`}
+              subtitle={
+                indexPhase === 'full'
+                  ? `Indexing your Drive · ${indexedCount.toLocaleString()} found`
+                  : `${items.length.toLocaleString()} in Drive`
+              }
               right={
                 <View style={styles.headerActions}>
                   {/* Folder filter — a dot marks that only some folders are shown. */}

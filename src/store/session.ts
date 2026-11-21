@@ -1,6 +1,8 @@
 /** Session + account state. Rehydrated from secure storage on launch. */
 import { create } from 'zustand';
 import { loadTokens, signIn, signOut, AuthCancelledError } from '@/lib/auth';
+import { getMeta, setMeta } from '@/lib/mediaIndex';
+import { resetIndex } from '@/lib/indexSync';
 
 type Status = 'loading' | 'signedOut' | 'signedIn';
 
@@ -27,6 +29,10 @@ export const useSession = create<SessionState>((set) => ({
   connect: async () => {
     try {
       const tokens = await signIn();
+      // The offline index belongs to one account: start fresh if a different one signs in.
+      const indexedFor = await getMeta('account');
+      if (indexedFor && indexedFor !== tokens.email) await resetIndex();
+      if (tokens.email) await setMeta('account', tokens.email);
       set({ status: 'signedIn', email: tokens.email, demoMode: false });
     } catch (err) {
       if (err instanceof AuthCancelledError) return;
@@ -37,7 +43,10 @@ export const useSession = create<SessionState>((set) => ({
   enterDemo: () => set({ status: 'signedIn', demoMode: true, email: 'demo@drivegallery' }),
 
   disconnect: async () => {
-    if (!useSession.getState().demoMode) await signOut();
+    if (!useSession.getState().demoMode) {
+      await signOut();
+      await resetIndex();
+    }
     set({ status: 'signedOut', email: undefined, demoMode: false });
   },
 }));

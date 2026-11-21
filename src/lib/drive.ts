@@ -16,17 +16,20 @@ import type { DriveFolder, MediaItem, Page } from './types';
 const API = 'https://www.googleapis.com/drive/v3';
 const MEDIA_QUERY =
   "(mimeType contains 'image/' or mimeType contains 'video/') and trashed = false";
-const FIELDS =
-  'nextPageToken, files(id,name,mimeType,size,createdTime,imageMediaMetadata(time,width,height),videoMediaMetadata(width,height,durationMillis),thumbnailLink,parents)';
+/** Per-file fields the app needs (shared by files.list, files.get and changes.list). */
+const FILE_FIELDS =
+  'id,name,mimeType,size,createdTime,imageMediaMetadata(time,width,height),videoMediaMetadata(width,height,durationMillis),thumbnailLink,parents,trashed';
+const FIELDS = `nextPageToken, files(${FILE_FIELDS})`;
 
 const MAX_RETRIES = 4;
 
 export class DriveAuthError extends Error {}
 
-interface DriveFile {
+export interface DriveFile {
   id: string;
   name: string;
   mimeType: string;
+  trashed?: boolean;
   size?: string;
   createdTime?: string;
   thumbnailLink?: string;
@@ -104,6 +107,45 @@ export async function authHeader(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${token}` };
 }
 
+// ---- Changes API (incremental sync for the offline index) ----
+
+/** Token marking "now" in the user's change feed. Store it, then ask for changes since. */
+export async function getStartPageToken(): Promise<string> {
+  const json = await driveFetchJson<{ startPageToken: string }>('/changes/startPageToken');
+  return json.startPageToken;
+}
+
+export interface DriveChange {
+  fileId: string;
+  removed?: boolean;
+  file?: DriveFile;
+}
+
+/** One page of changes since `pageToken`. The last page carries `newStartPageToken`. */
+export async function listChanges(
+  pageToken: string
+): Promise<{ changes: DriveChange[]; nextPageToken?: string; newStartPageToken?: string }> {
+  const params = new URLSearchParams({
+    pageToken,
+    pageSize: '1000',
+    includeRemoved: 'true',
+    spaces: 'drive',
+    fields: `nextPageToken, newStartPageToken, changes(fileId, removed, file(${FILE_FIELDS}))`,
+  });
+  const json = await driveFetchJson<{
+    changes?: DriveChange[];
+    nextPageToken?: string;
+    newStartPageToken?: string;
+  }>(`/changes?${params.toString()}`);
+  return { changes: json.changes ?? [], nextPageToken: json.nextPageToken, newStartPageToken: json.newStartPageToken };
+}
+
+/** Fresh metadata for one file (e.g. to renew an expired thumbnail link). */
+export async function getMediaFile(id: string): Promise<MediaItem | null> {
+  const f = await driveFetchJson<DriveFile>(`/files/${id}?fields=${encodeURIComponent(FILE_FIELDS)}`);
+  return f.trashed || !isMediaFile(f) ? null : toMediaItem(f);
+}
+
 /** Move an item to Drive trash (recoverable). Requires write scope. */
 export async function trashItem(id: string): Promise<void> {
   await driveFetch(`/files/${id}`, {
@@ -153,7 +195,11 @@ export async function listFolders(): Promise<DriveFolder[]> {
 
 // --- helpers ---
 
-function toMediaItem(f: DriveFile): MediaItem {
+export function isMediaFile(f: Pick<DriveFile, 'mimeType'>): boolean {
+  return f.mimeType.startsWith('image/') || f.mimeType.startsWith('video/');
+}
+
+export function toMediaItem(f: DriveFile): MediaItem {
   const isVideo = f.mimeType.startsWith('video/');
   const takenAtRaw = f.imageMediaMetadata?.time ?? f.createdTime;
   return {

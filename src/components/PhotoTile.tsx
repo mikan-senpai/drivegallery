@@ -6,6 +6,7 @@ import { radius } from '@/theme/tokens';
 import { useTheme } from '@/theme/ThemeProvider';
 import { formatDuration } from '@/lib/format';
 import { useAuthHeaders } from '@/lib/tokenStore';
+import { refreshThumbnail } from '@/lib/indexSync';
 import type { MediaItem } from '@/lib/types';
 
 interface Props {
@@ -50,6 +51,8 @@ function PhotoTileBase({ item, size, onPress, onLongPress, selecting, selected }
           contentFit="cover"
           transition={160}
           recyclingKey={item.id}
+          // Drive thumbnail links expire; renew this file's link if it fails to load.
+          onError={headers ? () => refreshThumbnail(item.id) : undefined}
         />
         {!compact && !selecting ? (
           <Feather name="cloud" size={13} color="rgba(255,255,255,0.92)" style={styles.cloud} />
