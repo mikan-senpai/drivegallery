@@ -4,10 +4,12 @@ import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ZoomableImage } from '@/components/ZoomableImage';
-import { useMediaItems } from '@/hooks/useMedia';
-import { trashItem } from '@/lib/drive';
+import { DriveVideo } from '@/components/DriveVideo';
+import { useMediaItems, useRemoveMediaItem } from '@/hooks/useMedia';
+import { getFolderPath, mediaUrl, trashItem } from '@/lib/drive';
+import { AuthCancelledError, ensureWriteAccess } from '@/lib/auth';
 import { useSession } from '@/store/session';
-import { formatBytes, formatDate } from '@/lib/format';
+import { formatBytes, formatDate, formatDuration } from '@/lib/format';
 import { useAuthHeaders } from '@/lib/tokenStore';
 import { type as typeTokens } from '@/theme/tokens';
 import type { MediaItem } from '@/lib/types';
@@ -25,38 +27,52 @@ export default function Viewer() {
   const [index, setIndex] = useState(initialIndex);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const current = items[index];
+  const removeFromList = useRemoveMediaItem();
 
   const onRemove = () => {
     if (!current) return;
-    Alert.alert('Remove from Drive', 'Moves this item to Google Drive Trash. You can restore it from Drive.', [
+    Alert.alert('Move to Trash', 'This moves the item to your Google Drive Trash. You can restore it from Drive for 30 days.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Move to Trash',
         style: 'destructive',
         onPress: async () => {
-          if (demoMode) return router.back();
+          if (demoMode) {
+            removeFromList(current.id);
+            return router.back();
+          }
           try {
+            // First delete asks Google for edit access; sign-in itself stays read-only.
+            const granted = await ensureWriteAccess();
+            if (!granted) return;
             await trashItem(current.id);
+            removeFromList(current.id);
             router.back();
           } catch (e) {
-            Alert.alert('Could not remove', e instanceof Error ? e.message : 'Try again.');
+            if (e instanceof AuthCancelledError) return;
+            Alert.alert('Could not move to Trash', e instanceof Error ? e.message : 'Try again.');
           }
         },
       },
     ]);
   };
 
-  const info = () => {
+  const info = async () => {
     if (!current) return;
+    const location = demoMode ? 'Demo photos' : await getFolderPath(current.parents).catch(() => 'Unknown folder');
     Alert.alert(
       current.name,
       [
-        formatDate(current.takenAt),
-        formatBytes(current.sizeBytes),
-        current.width && current.height ? `${current.width} × ${current.height}` : null,
-      ]
-        .filter(Boolean)
-        .join('  ·  ')
+        `${current.kind === 'video' ? 'Video' : 'Photo'} · ${formatDate(current.takenAt)}`,
+        [
+          formatBytes(current.sizeBytes),
+          current.width && current.height ? `${current.width} × ${current.height}` : null,
+          current.durationMs ? formatDuration(current.durationMs) : null,
+        ]
+          .filter(Boolean)
+          .join('  ·  '),
+        `📁 ${location}`,
+      ].join('\n')
     );
   };
 
@@ -70,11 +86,23 @@ export default function Viewer() {
         initialScrollIndex={initialIndex}
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         scrollEnabled={scrollEnabled}
+        // Re-render pages when the active page changes (stops videos you swipe away from).
+        extraData={index}
         showsHorizontalScrollIndicator={false}
         keyExtractor={(item) => item.id}
         onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
-        renderItem={({ item }) => (
+        renderItem={({ item, index: i }) => (
           <View style={{ width, height, alignItems: 'center', justifyContent: 'center' }}>
+            {item.kind === 'video' && !demoMode ? (
+              <DriveVideo
+                uri={mediaUrl(item.id)}
+                headers={headers}
+                poster={item.previewUrl ? { uri: item.previewUrl, headers, cacheKey: `${item.id}-full` } : undefined}
+                width={width}
+                height={height}
+                active={i === index}
+              />
+            ) : (
             <ZoomableImage
               source={{
                 uri: item.previewUrl ?? item.thumbnailUrl,
@@ -86,6 +114,7 @@ export default function Viewer() {
               height={height}
               onZoomChange={(z) => setScrollEnabled(!z)}
             />
+            )}
           </View>
         )}
       />

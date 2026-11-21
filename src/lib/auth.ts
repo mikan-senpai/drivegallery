@@ -23,8 +23,10 @@ const TOKEN_KEY = 'google.tokens';
 /** Google access tokens last ~1h; refresh a little early. */
 const TOKEN_TTL_MS = 55 * 60 * 1000;
 
-/** Read-only Drive access. */
+/** Read-only Drive access — all that sign-in asks for. */
 export const SCOPES_READONLY = ['https://www.googleapis.com/auth/drive.readonly'];
+/** Edit access, requested only the first time the user deletes something. */
+export const SCOPE_DRIVE_EDIT = 'https://www.googleapis.com/auth/drive';
 
 export class AuthCancelledError extends Error {}
 export class NativeUnavailableError extends Error {
@@ -119,6 +121,22 @@ export async function getValidAccessToken(force = false): Promise<string | null>
   } catch {
     return null;
   }
+}
+
+/**
+ * Incremental auth: make sure the user has granted Drive edit access, asking
+ * Google for it only if they haven't. Returns false if they decline.
+ */
+export async function ensureWriteAccess(): Promise<boolean> {
+  const { GoogleSignin, isSuccessResponse } = gsi();
+  configure();
+  if (GoogleSignin.getCurrentUser()?.scopes.includes(SCOPE_DRIVE_EDIT)) return true;
+
+  const response = await GoogleSignin.addScopes({ scopes: [SCOPE_DRIVE_EDIT] });
+  if (!response || !isSuccessResponse(response)) return false;
+  // Mint a token that carries the newly granted scope.
+  await getValidAccessToken(true);
+  return true;
 }
 
 export async function signOut(): Promise<void> {

@@ -3,13 +3,13 @@
  * Drive via TanStack Query's infinite query. A SQLite-backed index + Changes API
  * delta sync replaces the live paging here in a later phase (see PRD).
  */
-import { useMemo } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { listMedia } from '@/lib/drive';
 import { mockMedia } from '@/lib/mock';
 import { groupByDay } from '@/lib/grouping';
 import { useSession } from '@/store/session';
-import type { MediaItem } from '@/lib/types';
+import type { MediaItem, Page } from '@/lib/types';
 
 export function useMediaItems(): {
   items: MediaItem[];
@@ -63,4 +63,20 @@ export function useTimeline() {
   const media = useMediaItems();
   const rows = useMemo(() => groupByDay(media.items), [media.items]);
   return { ...media, rows };
+}
+
+/** Drop an item from the loaded media (e.g. after moving it to Drive trash). */
+export function useRemoveMediaItem(): (id: string) => void {
+  const queryClient = useQueryClient();
+  return useCallback(
+    (id: string) => {
+      queryClient.setQueryData<InfiniteData<Page<MediaItem>>>(['media', 'drive'], (data) =>
+        data
+          ? { ...data, pages: data.pages.map((p) => ({ ...p, items: p.items.filter((i) => i.id !== id) })) }
+          : data
+      );
+      queryClient.setQueryData<MediaItem[]>(['media', 'demo'], (data) => data?.filter((i) => i.id !== id));
+    },
+    [queryClient]
+  );
 }

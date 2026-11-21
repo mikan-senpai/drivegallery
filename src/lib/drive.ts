@@ -102,6 +102,32 @@ export async function trashItem(id: string): Promise<void> {
   });
 }
 
+const folderCache = new Map<string, { name: string; parent?: string }>();
+
+/**
+ * Human-readable location of a file, e.g. "My Drive / WhatsApp / Video".
+ * Walks parent folders up to the root (cached). Files with no parent are
+ * ones shared with the user rather than stored in their Drive.
+ */
+export async function getFolderPath(parents?: string[]): Promise<string> {
+  if (!parents?.length) return 'Shared with me';
+  const names: string[] = [];
+  let id: string | undefined = parents[0];
+
+  for (let depth = 0; id && depth < 12; depth++) {
+    let folder = folderCache.get(id);
+    if (!folder) {
+      const res = await driveFetch(`/files/${id}?fields=name,parents`);
+      const json = (await res.json()) as { name: string; parents?: string[] };
+      folder = { name: json.name, parent: json.parents?.[0] };
+      folderCache.set(id, folder);
+    }
+    names.unshift(folder.name);
+    id = folder.parent;
+  }
+  return names.join(' / ');
+}
+
 /** Folders that directly contain media, with counts (best-effort, MVP). */
 export async function listFolders(): Promise<DriveFolder[]> {
   const params = new URLSearchParams({
