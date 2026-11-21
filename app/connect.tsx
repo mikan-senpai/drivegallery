@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, spacing, type } from '@/theme/tokens';
 import { useSession } from '@/store/session';
+import { NativeUnavailableError } from '@/lib/auth';
 
 const FEATURES = [
   { icon: 'shield' as const, text: 'Read-only access. Revoke anytime from Google.' },
@@ -25,7 +26,14 @@ export default function Connect() {
     try {
       await connect();
     } catch (e) {
-      Alert.alert('Sign-in failed', e instanceof Error ? e.message : 'Please try again.');
+      if (e instanceof NativeUnavailableError) {
+        Alert.alert(
+          'Development build required',
+          'Google Sign-In doesn’t run in Expo Go. Tap “Explore with demo photos” to preview the app here, or create a development build to connect your real Drive (see the README).'
+        );
+      } else {
+        Alert.alert('Sign-in failed', e instanceof Error ? e.message : 'Please try again.');
+      }
     } finally {
       setBusy(false);
     }
