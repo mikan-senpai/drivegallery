@@ -68,10 +68,16 @@ export function useMediaItems(): {
     enabled: !demoMode && (!scoped || folderIndex.isSuccess),
     placeholderData: keepPreviousData,
     queryFn: () => {
-      // "Whole Drive except…" filters by the folders that fall out of scope.
+      // "Whole Drive except…" filters by the folders that fall out of scope, plus any
+      // directly hidden folders outside My Drive's tree (e.g. albums shared with you).
       const excluded =
         scope.mode === 'allExcept' && folderIndex.data
-          ? [...folderIndex.data.byId.keys()].filter((id) => !scope.allowed.has(id))
+          ? [
+              ...new Set([
+                ...[...folderIndex.data.byId.keys()].filter((id) => !scope.allowed.has(id)),
+                ...selection.exclude,
+              ]),
+            ]
           : [];
       return queryMedia(scope, excluded);
     },

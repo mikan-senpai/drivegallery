@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, useWindowDimensions } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
@@ -10,6 +11,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { radius, spacing, type } from '@/theme/tokens';
 import { useFolderIndex, useMediaItems } from '@/hooks/useMedia';
 import { useFavorites } from '@/store/favorites';
+import { useFolderSelection } from '@/store/folderSelection';
 import { useAuthHeaders } from '@/lib/tokenStore';
 import { buildFolderAlbums, FAVORITES_ALBUM, VIDEOS_ALBUM, type FolderAlbum } from '@/lib/albums';
 import type { MediaItem } from '@/lib/types';
@@ -25,12 +27,31 @@ export default function Albums() {
   const { data: folderIndex } = useFolderIndex();
   const favorites = useFavorites((s) => s.ids);
 
+  const hidden = useFolderSelection((s) => s.exclude);
+  const setRule = useFolderSelection((s) => s.set);
+  const [showHidden, setShowHidden] = useState(false);
+
   const folderAlbums = useMemo(() => buildFolderAlbums(items, folderIndex), [items, folderIndex]);
   const favoriteItems = useMemo(() => items.filter((i) => favorites[i.id]), [items, favorites]);
   const videoItems = useMemo(() => items.filter((i) => i.kind === 'video'), [items]);
   const cardW = (width - spacing.lg * 2 - GAP) / 2;
 
   const open = (id: string) => router.push({ pathname: '/album/[id]', params: { id } });
+
+  // Hiding an album = excluding its Drive folder, so its photos leave Photos and Search too.
+  const hideAlbum = (album: FolderAlbum) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      `Hide "${album.name}"?`,
+      'Its photos will also be hidden from Photos and Search, along with any folders inside it. Nothing is deleted from Drive — unhide it anytime under Hidden albums.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Hide', style: 'destructive', onPress: () => setRule('exclude', album.id, true) },
+      ]
+    );
+  };
+
+  const folderName = (id: string) => folderIndex?.byId.get(id)?.name ?? 'Shared folder';
 
   return (
     <View style={[styles.container, { backgroundColor: palette.bg, paddingTop: insets.top }]}>
@@ -59,15 +80,52 @@ export default function Albums() {
                 onPress={() => open(VIDEOS_ALBUM)}
               />
             </View>
-            <Text style={[type.uppercase, styles.section, { color: palette.fgVariant }]}>Drive folders</Text>
+            <View style={styles.sectionRow}>
+              <Text style={[type.uppercase, { color: palette.fgVariant }]}>Drive folders</Text>
+              <Text style={[type.caption, { color: palette.fgVariant }]}>Long-press to hide</Text>
+            </View>
           </View>
+        }
+        ListFooterComponent={
+          hidden.length ? (
+            <View style={styles.hiddenWrap}>
+              <Pressable onPress={() => setShowHidden((v) => !v)} style={styles.sectionRowFlat} hitSlop={6}>
+                <Text style={[type.uppercase, { color: palette.fgVariant }]}>Hidden albums · {hidden.length}</Text>
+                <Feather name={showHidden ? 'chevron-up' : 'chevron-down'} size={16} color={palette.fgVariant} />
+              </Pressable>
+              {showHidden
+                ? hidden.map((id) => (
+                    <View key={id} style={[styles.hiddenRow, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                      <Feather name="eye-off" size={18} color={palette.fgVariant} />
+                      <Text style={[type.bodyMd, { color: palette.fg, flex: 1 }]} numberOfLines={1}>
+                        {folderName(id)}
+                      </Text>
+                      <Pressable
+                        onPress={() => setRule('exclude', id, false)}
+                        hitSlop={8}
+                        style={[styles.unhide, { borderColor: palette.border }]}
+                      >
+                        <Text style={[type.label, { color: palette.primary }]}>Unhide</Text>
+                      </Pressable>
+                    </View>
+                  ))
+                : null}
+            </View>
+          ) : undefined
         }
         ListEmptyComponent={
           isLoading ? undefined : (
             <EmptyState icon="folder" title="No folders yet" hint="Folders containing your photos and videos show up here." />
           )
         }
-        renderItem={({ item }) => <FolderAlbumCard album={item} width={cardW} onPress={() => open(item.id)} />}
+        renderItem={({ item }) => (
+          <FolderAlbumCard
+            album={item}
+            width={cardW}
+            onPress={() => open(item.id)}
+            onLongPress={() => hideAlbum(item)}
+          />
+        )}
       />
     </View>
   );
@@ -119,10 +177,20 @@ function SmartAlbum({
   );
 }
 
-function FolderAlbumCard({ album, width, onPress }: { album: FolderAlbum; width: number; onPress: () => void }) {
+function FolderAlbumCard({
+  album,
+  width,
+  onPress,
+  onLongPress,
+}: {
+  album: FolderAlbum;
+  width: number;
+  onPress: () => void;
+  onLongPress: () => void;
+}) {
   const { palette } = useTheme();
   return (
-    <Pressable onPress={onPress} style={{ width }}>
+    <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={350} style={{ width }}>
       <Cover item={album.cover} style={[styles.folderCover, { width, height: width }]} />
       <Text style={[type.bodyMd, { color: palette.fg, marginTop: 8 }]} numberOfLines={1}>
         {album.name}
@@ -148,6 +216,24 @@ const styles = StyleSheet.create({
   },
   smartCover: { width: 52, height: 52, borderRadius: radius.sm },
   smartTitle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  section: { paddingHorizontal: spacing.lg, marginTop: spacing.md },
+  sectionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.md,
+  },
+  sectionRowFlat: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
+  hiddenWrap: { marginTop: spacing.xl, gap: spacing.sm },
+  hiddenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  unhide: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1 },
   folderCover: { borderRadius: radius.lg },
 });
