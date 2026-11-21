@@ -5,14 +5,13 @@
  * expo-secure-store (Keychain / Keystore) for token storage. Access tokens
  * are refreshed silently; the refresh token never leaves secure storage.
  *
- * Requires a native build (dev client or EAS) — Google Sign-In does not run
- * in Expo Go. See README "Auth setup".
+ * The native module is loaded LAZILY (see `gsi()`), because importing it at
+ * module scope calls TurboModuleRegistry.getEnforcing('RNGoogleSignin'), which
+ * throws in Expo Go where the native binary isn't present. Loading on demand
+ * keeps the app (and demo mode) bootable in Expo Go; real sign-in still needs a
+ * development build. See README "Auth setup".
  */
 import * as SecureStore from 'expo-secure-store';
-import {
-  GoogleSignin,
-  statusCodes,
-} from '@react-native-google-signin/google-signin';
 import type { GoogleTokens } from './types';
 
 const TOKEN_KEY = 'google.tokens';
@@ -21,11 +20,33 @@ const TOKEN_KEY = 'google.tokens';
 export const SCOPES_READONLY = ['https://www.googleapis.com/auth/drive.readonly'];
 export const SCOPE_WRITE = 'https://www.googleapis.com/auth/drive.file';
 
+export class AuthCancelledError extends Error {}
+export class NativeUnavailableError extends Error {
+  constructor() {
+    super('Google Sign-In needs a development build — it is not available in Expo Go.');
+  }
+}
+
+type GoogleSigninModule = typeof import('@react-native-google-signin/google-signin');
+let moduleRef: GoogleSigninModule | null = null;
+
+/** Lazily load the native module, surfacing a friendly error in Expo Go. */
+function gsi(): GoogleSigninModule {
+  if (moduleRef) return moduleRef;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    moduleRef = require('@react-native-google-signin/google-signin') as GoogleSigninModule;
+  } catch {
+    throw new NativeUnavailableError();
+  }
+  return moduleRef;
+}
+
 let configured = false;
 
 export function configureGoogleSignIn(): void {
   if (configured) return;
-  GoogleSignin.configure({
+  gsi().GoogleSignin.configure({
     scopes: SCOPES_READONLY,
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
@@ -35,9 +56,8 @@ export function configureGoogleSignIn(): void {
   configured = true;
 }
 
-export class AuthCancelledError extends Error {}
-
 export async function signIn(): Promise<GoogleTokens> {
+  const { GoogleSignin, statusCodes } = gsi();
   configureGoogleSignIn();
   try {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -64,6 +84,7 @@ export async function getValidAccessToken(): Promise<string | null> {
   const tokens = await loadTokens();
   if (tokens && tokens.expiresAt - 60_000 > Date.now()) return tokens.accessToken;
 
+  const { GoogleSignin } = gsi();
   configureGoogleSignIn();
   const hasPrevious = await GoogleSignin.hasPreviousSignIn();
   if (!hasPrevious) return null;
@@ -82,10 +103,12 @@ export async function getValidAccessToken(): Promise<string | null> {
 }
 
 export async function signOut(): Promise<void> {
-  configureGoogleSignIn();
   try {
+    const { GoogleSignin } = gsi();
     await GoogleSignin.revokeAccess();
     await GoogleSignin.signOut();
+  } catch {
+    // Native module unavailable (Expo Go) or already signed out — clear local state anyway.
   } finally {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
   }
