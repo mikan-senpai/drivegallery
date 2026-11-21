@@ -29,22 +29,26 @@ function shareModule(): ShareModule {
   }
 }
 
-/** Download the items to the cache and open the share sheet. Resolves when the sheet closes. */
-export async function shareMedia(items: MediaItem[], opts: { demo?: boolean } = {}): Promise<void> {
-  if (items.length === 0) return;
-  const Share = shareModule();
-
+/** Download originals from Drive into the app cache (shared by Share and Save to phone). */
+export async function downloadToCache(items: MediaItem[], opts: { demo?: boolean } = {}): Promise<File[]> {
   const dir = new Directory(Paths.cache, 'share');
   if (!dir.exists) dir.create({ intermediates: true });
 
   const headers = opts.demo ? undefined : await authHeader();
-  const files = await Promise.all(
+  return Promise.all(
     items.map((item) => {
       const url = opts.demo ? (item.thumbnailUrl ?? '') : mediaUrl(item.id);
       const target = new File(dir, safeName(item));
       return File.downloadFileAsync(url, target, { headers, idempotent: true });
     })
   );
+}
+
+/** Download the items to the cache and open the share sheet. Resolves when the sheet closes. */
+export async function shareMedia(items: MediaItem[], opts: { demo?: boolean } = {}): Promise<void> {
+  if (items.length === 0) return;
+  const Share = shareModule();
+  const files = await downloadToCache(items, opts);
 
   const kinds = new Set(items.map((i) => i.kind));
   const type = kinds.size > 1 ? '*/*' : kinds.has('video') ? 'video/*' : 'image/*';

@@ -101,6 +101,16 @@ export default function Albums() {
               <Text style={[type.bodyMd, { color: palette.fg, flex: 1 }]}>Locked folder</Text>
               <Feather name="chevron-right" size={18} color={palette.fgVariant} />
             </Pressable>
+            <Pressable
+              onPress={() => router.push('/places')}
+              style={[styles.lockedRow, { backgroundColor: palette.surface, borderColor: palette.border }]}
+            >
+              <View style={[styles.lockedIcon, { backgroundColor: palette.primary + '22' }]}>
+                <Feather name="map-pin" size={16} color={palette.primary} />
+              </View>
+              <Text style={[type.bodyMd, { color: palette.fg, flex: 1 }]}>Places</Text>
+              <Feather name="chevron-right" size={18} color={palette.fgVariant} />
+            </Pressable>
             <View style={styles.sectionRow}>
               <Text style={[type.uppercase, { color: palette.fgVariant }]}>Drive folders</Text>
               <Text style={[type.caption, { color: palette.fgVariant }]}>Long-press to hide or lock</Text>

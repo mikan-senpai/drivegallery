@@ -37,6 +37,7 @@ import { useSession } from '@/store/session';
 import { AuthCancelledError, ensureWriteAccess } from '@/lib/auth';
 import { trashItem } from '@/lib/drive';
 import { shareMedia } from '@/lib/share';
+import { saveToPhone } from '@/lib/save';
 import { useIndexStatus } from '@/lib/indexSync';
 import { buildMemories } from '@/lib/memories';
 import { MemoriesStrip, MEMORIES_H } from '@/components/MemoriesStrip';
@@ -195,7 +196,7 @@ export default function Timeline() {
   const clearSelection = useSelection((s) => s.clear);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const removeFromList = useRemoveMediaItem();
-  const [busy, setBusy] = useState<'share' | 'trash' | null>(null);
+  const [busy, setBusy] = useState<'share' | 'save' | 'trash' | null>(null);
 
   const onTilePress = (item: MediaItem) => {
     if (selecting) toggleSelection(item.id);
@@ -333,6 +334,21 @@ export default function Timeline() {
   );
 
   const selectedItems = () => items.filter((i) => selectedSet.has(i.id));
+
+  const saveSelected = async () => {
+    const picked = selectedItems();
+    if (!picked.length || busy) return;
+    setBusy('save');
+    try {
+      const n = await saveToPhone(picked, { demo: demoMode });
+      clearSelection();
+      Alert.alert('Saved', `Saved ${n} item${n > 1 ? 's' : ''} to your phone's gallery.`);
+    } catch (e) {
+      Alert.alert('Could not save', e instanceof Error ? e.message : 'Try again.');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const shareSelected = async () => {
     const picked = selectedItems();
@@ -597,8 +613,15 @@ export default function Timeline() {
             />
             <View style={[styles.divider, { backgroundColor: palette.border }]} />
             <ActionButton
+              icon="download"
+              label={busy === 'save' ? 'Saving…' : 'Save'}
+              busy={busy === 'save'}
+              onPress={saveSelected}
+            />
+            <View style={[styles.divider, { backgroundColor: palette.border }]} />
+            <ActionButton
               icon="trash-2"
-              label={busy === 'trash' ? 'Moving…' : 'Move to Trash'}
+              label={busy === 'trash' ? 'Moving…' : 'Trash'}
               busy={busy === 'trash'}
               onPress={trashSelected}
             />

@@ -1,11 +1,14 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, FlatList, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert, FlatList, Linking, useWindowDimensions } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ZoomableImage } from '@/components/ZoomableImage';
 import { DriveVideo } from '@/components/DriveVideo';
-import { useLockedItems, useMediaItems, useRemoveMediaItem } from '@/hooks/useMedia';
+import { useFolderIndex, useLockedItems, useMediaItems, useRemoveMediaItem } from '@/hooks/useMedia';
+import { ActionMenu, type MenuAction } from '@/components/ActionMenu';
+import { useFolderSelection } from '@/store/folderSelection';
+import { saveToPhone } from '@/lib/save';
 import { LOCKED_ALBUM } from '@/store/locked';
 import { getFolderPath, mediaUrl, trashItem } from '@/lib/drive';
 import { AuthCancelledError, ensureWriteAccess } from '@/lib/auth';
@@ -99,6 +102,76 @@ export default function Viewer() {
     }
   };
 
+  // ---- ⋮ menu ----
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { data: folderIndex } = useFolderIndex();
+  const hideRule = useFolderSelection((s) => s.set);
+  const folderId = current?.parents?.[0];
+  const folderName = folderId ? (folderIndex?.byId.get(folderId)?.name ?? 'this folder') : null;
+
+  const onSave = async () => {
+    if (!current) return;
+    try {
+      const n = await saveToPhone([current], { demo: demoMode });
+      Alert.alert('Saved', `Saved ${n === 1 ? 'to' : `${n} items to`} your phone's gallery.`);
+    } catch (e) {
+      Alert.alert('Could not save', e instanceof Error ? e.message : 'Try again.');
+    }
+  };
+
+  // Hides the photo's *actual* folder, so it always disappears — even when the folder you
+  // browsed to reached it through a shortcut or lives outside My Drive.
+  const hideFolder = () => {
+    if (!current || !folderId) {
+      Alert.alert('Not in a folder', "This file isn't inside a folder you can hide.");
+      return;
+    }
+    Alert.alert(
+      `Hide "${folderName}"?`,
+      'Everything in this folder (and folders inside it) disappears from Photos, Albums and Search. Nothing is deleted from Drive — unhide it anytime in Albums > Hidden albums.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Hide',
+          onPress: () => {
+            hideRule('exclude', folderId, true);
+            router.back();
+          },
+        },
+      ]
+    );
+  };
+
+  const menuActions: MenuAction[] = [
+    { icon: 'download', label: 'Save to phone', onPress: onSave },
+    {
+      icon: 'play-circle',
+      label: 'Slideshow',
+      onPress: () =>
+        current && router.push({ pathname: '/slideshow', params: { album: album ?? '', start: current.id } }),
+    },
+    ...(folderId && album !== LOCKED_ALBUM
+      ? [
+          {
+            icon: 'folder' as const,
+            label: `Show folder${folderName ? ` · ${folderName}` : ''}`,
+            onPress: () => router.push({ pathname: '/album/[id]', params: { id: folderId } }),
+          },
+          { icon: 'eye-off' as const, label: 'Hide this folder', onPress: hideFolder },
+        ]
+      : []),
+    ...(!demoMode && current
+      ? [
+          {
+            icon: 'external-link' as const,
+            label: 'Open in Google Drive',
+            onPress: () => void Linking.openURL(`https://drive.google.com/file/d/${current.id}/view`),
+          },
+        ]
+      : []),
+    { icon: 'info', label: 'Details', onPress: () => void info() },
+  ];
+
   const info = async () => {
     if (!current) return;
     const location = demoMode ? 'Demo photos' : await getFolderPath(current.parents).catch(() => 'Unknown folder');
@@ -177,8 +250,12 @@ export default function Viewer() {
             In Drive · {formatBytes(current?.sizeBytes)} · {index + 1}/{items.length}
           </Text>
         </View>
-        <Feather name="more-vertical" size={22} color="#fff" />
+        <Pressable onPress={() => setMenuOpen(true)} hitSlop={12} accessibilityLabel="More options">
+          <Feather name="more-vertical" size={22} color="#fff" />
+        </Pressable>
       </SafeAreaView>
+
+      <ActionMenu visible={menuOpen} onClose={() => setMenuOpen(false)} actions={menuActions} />
 
       <SafeAreaView
         style={styles.bottom}

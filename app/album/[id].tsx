@@ -48,6 +48,16 @@ export default function Album() {
           </Text>
           <Text style={[type.bodySm, { color: palette.fgVariant }]}>{albumItems.length.toLocaleString()} items</Text>
         </View>
+        {albumItems.some((i) => i.kind === 'photo') ? (
+          <Pressable
+            onPress={() => router.push({ pathname: '/slideshow', params: { album: id } })}
+            hitSlop={10}
+            accessibilityLabel="Play slideshow"
+            style={[styles.playBtn, { borderColor: palette.border, backgroundColor: palette.surface }]}
+          >
+            <Feather name="play" size={15} color={palette.fg} />
+          </Pressable>
+        ) : null}
       </View>
 
       <FlashList
@@ -86,4 +96,12 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
   },
   row: { flexDirection: 'row' },
+  playBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
 });

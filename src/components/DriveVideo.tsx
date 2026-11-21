@@ -12,6 +12,7 @@ import { View, Pressable, StyleSheet } from 'react-native';
 import { Image, type ImageSource } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { VideoControls } from '@/components/VideoControls';
 
 interface Props {
   uri: string;
@@ -68,7 +69,12 @@ function Player({ uri, headers, width, height }: Pick<Props, 'uri' | 'headers' |
     p.loop = true;
     p.play();
   });
-  return <VideoView player={player} style={{ width, height }} contentFit="contain" nativeControls />;
+  return (
+    <View style={{ width, height }}>
+      <VideoView player={player} style={{ width, height }} contentFit="contain" nativeControls={false} />
+      <VideoControls player={player} />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
