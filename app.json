@@ -9,10 +9,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.example.drivegallery"
+      "bundleIdentifier": "com.mikansenpai.drivegallery"
     },
     "android": {
-      "package": "com.example.drivegallery",
+      "package": "com.mikansenpai.drivegallery",
       "edgeToEdgeEnabled": true
     },
     "plugins": [

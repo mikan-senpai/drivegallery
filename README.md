@@ -32,6 +32,17 @@ src/
   components/            FloatingTabBar, PhotoTile, ScreenHeader, …
 ```
 
+## Development build (EAS)
+
+Native features (Google Sign-In, custom shaders) don't run in Expo Go. Build a development client in the cloud — no Android Studio needed:
+
+```bash
+npx eas-cli login
+npx eas-cli build --profile development --platform android
+```
+
+Install the APK from the link EAS prints, then run `npm start` and open the project from the installed **DriveGallery** app instead of Expo Go.
+
 ## Auth setup (real Drive)
 
 Google Sign-In does not run in Expo Go — use a development build.
