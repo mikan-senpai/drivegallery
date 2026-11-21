@@ -62,10 +62,21 @@ async function driveFetch(path: string, init?: RequestInit): Promise<Response> {
   throw new Error('Drive API: retries exhausted');
 }
 
-/** One page of media, newest first. Pass the previous nextPageToken to continue. */
-export async function listMedia(pageToken?: string, pageSize = 200): Promise<Page<MediaItem>> {
+/** GET a Drive endpoint and parse JSON (auth, retries and errors handled). */
+export async function driveFetchJson<T>(path: string): Promise<T> {
+  const res = await driveFetch(path);
+  return (await res.json()) as T;
+}
+
+/**
+ * One page of media, newest first. Pass the previous nextPageToken to continue.
+ * With `folderIds`, only media directly inside those folders (callers pass the
+ * fully resolved folder set, since Drive can't search subfolders itself).
+ */
+export async function listMedia(pageToken?: string, pageSize = 200, folderIds?: string[]): Promise<Page<MediaItem>> {
+  const scope = folderIds?.length ? ` and (${folderIds.map((id) => `'${id}' in parents`).join(' or ')})` : '';
   const params = new URLSearchParams({
-    q: MEDIA_QUERY,
+    q: MEDIA_QUERY + scope,
     fields: FIELDS,
     pageSize: String(pageSize),
     orderBy: 'createdTime desc',

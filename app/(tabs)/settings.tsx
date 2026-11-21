@@ -56,6 +56,10 @@ export default function Settings() {
           </View>
         </Section>
 
+        <Section title="Library" palette={palette}>
+          <Row palette={palette} icon="folder" label="Folders to show" onPress={() => router.push('/folders')} />
+        </Section>
+
         <Section title="Storage" palette={palette}>
           <Row palette={palette} icon="trash-2" label="Clear thumbnail cache" onPress={() => Alert.alert('Cache', 'Thumbnail cache cleared.')} />
         </Section>

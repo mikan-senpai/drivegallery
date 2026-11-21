@@ -29,6 +29,7 @@ function Navigator() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.bg } }}>
         <Stack.Screen name="connect" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="folders" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="photo/[id]" options={{ presentation: 'transparentModal', animation: 'fade' }} />
       </Stack>
     </>

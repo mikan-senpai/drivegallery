@@ -24,6 +24,7 @@ import { FastScroller, type FastScrollerHandle } from '@/components/FastScroller
 import { useTheme } from '@/theme/ThemeProvider';
 import { spacing, type } from '@/theme/tokens';
 import { useTimeline } from '@/hooks/useMedia';
+import { useFolderSelection } from '@/store/folderSelection';
 import type { MediaItem } from '@/lib/types';
 import { monthLabel, type TimelineRow } from '@/lib/grouping';
 
@@ -47,6 +48,7 @@ export default function Timeline() {
   const [headerH, setHeaderH] = useState(insets.top + 118);
 
   const { rows, items, isLoading, error, hasMore, loadMore, refetch } = useTimeline();
+  const foldersScoped = useFolderSelection((s) => s.include.length > 0 || s.exclude.length > 0);
   const errorMessage = error ? (error instanceof Error ? error.message : String(error)) : null;
 
   useEffect(() => {
@@ -180,13 +182,24 @@ export default function Timeline() {
             title="Photos"
             subtitle={`${items.length.toLocaleString()} in Drive`}
             right={
-              <Pressable onPress={() => router.push('/settings')} hitSlop={8}>
-                <GlassView radius={19} style={styles.gear}>
-                  <View style={styles.gearInner}>
-                    <Feather name="settings" size={17} color={palette.fg} />
-                  </View>
-                </GlassView>
-              </Pressable>
+              <View style={styles.headerActions}>
+                {/* Folder filter — a dot marks that only some folders are shown. */}
+                <Pressable onPress={() => router.push('/folders')} hitSlop={8} accessibilityLabel="Choose folders">
+                  <GlassView radius={19} style={styles.gear}>
+                    <View style={styles.gearInner}>
+                      <Feather name="folder" size={17} color={palette.fg} />
+                    </View>
+                  </GlassView>
+                  {foldersScoped ? <View style={[styles.dot, { backgroundColor: palette.primary }]} /> : null}
+                </Pressable>
+                <Pressable onPress={() => router.push('/settings')} hitSlop={8} accessibilityLabel="Settings">
+                  <GlassView radius={19} style={styles.gear}>
+                    <View style={styles.gearInner}>
+                      <Feather name="settings" size={17} color={palette.fg} />
+                    </View>
+                  </GlassView>
+                </Pressable>
+              </View>
             }
           />
           <FilterChips value={filter} onChange={setFilter} />
@@ -255,6 +268,8 @@ const styles = StyleSheet.create({
   topScrim: { position: 'absolute', top: 0, left: 0, right: 0 },
   headerFade: { height: 26 },
   gear: { width: 38, height: 38 },
+  headerActions: { flexDirection: 'row', gap: 10 },
+  dot: { position: 'absolute', top: 1, right: 1, width: 9, height: 9, borderRadius: 5 },
   gearInner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   dayRow: { height: DAY_H, justifyContent: 'center' },
   day: { marginHorizontal: 6 },
