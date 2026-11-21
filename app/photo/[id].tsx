@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Alert, FlatList, useWindowDimensions } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ZoomableImage } from '@/components/ZoomableImage';
@@ -12,14 +12,24 @@ import { shareMedia } from '@/lib/share';
 import { useSession } from '@/store/session';
 import { formatBytes, formatDate, formatDuration } from '@/lib/format';
 import { useAuthHeaders } from '@/lib/tokenStore';
+import { useFavorites, useIsFavorite } from '@/store/favorites';
+import { itemsInAlbum } from '@/lib/albums';
+import * as Haptics from 'expo-haptics';
 import { type as typeTokens } from '@/theme/tokens';
 import type { MediaItem } from '@/lib/types';
 
 export default function Viewer() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, album } = useLocalSearchParams<{ id: string; album?: string }>();
   const router = useRouter();
   const demoMode = useSession((s) => s.demoMode);
-  const { items } = useMediaItems();
+  const { items: allItems } = useMediaItems();
+  // Opened from an album → swipe within that album. Favorites are snapshotted at
+  // open time so un-hearting a photo doesn't yank it out from under you.
+  const [favoritesAtOpen] = useState(() => useFavorites.getState().ids);
+  const items = useMemo(
+    () => (album ? itemsInAlbum(allItems, album, favoritesAtOpen) : allItems),
+    [allItems, album, favoritesAtOpen]
+  );
   const { width, height } = useWindowDimensions();
   const headers = useAuthHeaders();
   const listRef = useRef<FlatList<MediaItem>>(null);
@@ -32,6 +42,14 @@ export default function Viewer() {
   const [chromeBottom, setChromeBottom] = useState(0);
   const current = items[index];
   const removeFromList = useRemoveMediaItem();
+  const isFavorite = useIsFavorite(current?.id);
+  const toggleFavorite = useFavorites((s) => s.toggle);
+
+  const onFavorite = () => {
+    if (!current) return;
+    Haptics.impactAsync(isFavorite ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium);
+    toggleFavorite(current.id);
+  };
 
   const onRemove = () => {
     if (!current) return;
@@ -161,7 +179,10 @@ export default function Viewer() {
         onLayout={(e) => setChromeBottom(e.nativeEvent.layout.height)}
       >
         <Action icon="share" label={sharing ? 'Preparing…' : 'Share'} onPress={onShare} />
-        <Action icon="heart" label="Favorite" onPress={() => Alert.alert('Favorite', 'Toggled (stub).')} />
+        <Pressable onPress={onFavorite} style={styles.action} hitSlop={8} accessibilityLabel="Favorite">
+          <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={21} color={isFavorite ? '#ff5a6e' : '#fff'} />
+          <Text style={styles.actionLabel}>{isFavorite ? 'Favorited' : 'Favorite'}</Text>
+        </Pressable>
         <Action icon="info" label="Info" onPress={info} />
         <Action icon="trash-2" label="Remove" onPress={onRemove} />
       </SafeAreaView>

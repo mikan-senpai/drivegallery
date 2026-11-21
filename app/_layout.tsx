@@ -30,6 +30,7 @@ function Navigator() {
         <Stack.Screen name="connect" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="folders" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="album/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="photo/[id]" options={{ presentation: 'transparentModal', animation: 'fade' }} />
       </Stack>
     </>

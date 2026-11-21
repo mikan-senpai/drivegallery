@@ -1,59 +1,153 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, useWindowDimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, spacing, type } from '@/theme/tokens';
-import { useMediaItems } from '@/hooks/useMedia';
+import { useFolderIndex, useMediaItems } from '@/hooks/useMedia';
+import { useFavorites } from '@/store/favorites';
+import { useAuthHeaders } from '@/lib/tokenStore';
+import { buildFolderAlbums, FAVORITES_ALBUM, VIDEOS_ALBUM, type FolderAlbum } from '@/lib/albums';
+import type { MediaItem } from '@/lib/types';
+
+const GAP = 12;
 
 export default function Albums() {
   const { palette } = useTheme();
   const insets = useSafeAreaInsets();
-  const { items } = useMediaItems();
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const { items, isLoading } = useMediaItems();
+  const { data: folderIndex } = useFolderIndex();
+  const favorites = useFavorites((s) => s.ids);
 
-  const albums = useMemo(
-    () => [
-      { id: 'fav', name: 'Favorites', icon: 'heart' as const, count: items.filter((i) => i.favorite).length },
-      { id: 'videos', name: 'Videos', icon: 'video' as const, count: items.filter((i) => i.kind === 'video').length },
-    ],
-    [items]
-  );
+  const folderAlbums = useMemo(() => buildFolderAlbums(items, folderIndex), [items, folderIndex]);
+  const favoriteItems = useMemo(() => items.filter((i) => favorites[i.id]), [items, favorites]);
+  const videoItems = useMemo(() => items.filter((i) => i.kind === 'video'), [items]);
+  const cardW = (width - spacing.lg * 2 - GAP) / 2;
+
+  const open = (id: string) => router.push({ pathname: '/album/[id]', params: { id } });
 
   return (
     <View style={[styles.container, { backgroundColor: palette.bg, paddingTop: insets.top }]}>
-      <ScreenHeader title="Albums" subtitle="Favorites, videos, and Drive folders" />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: insets.bottom + 110, gap: spacing.sm }}>
-        {albums.map((a) => (
-          <View key={a.id} style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <View style={[styles.halo, { backgroundColor: palette.primary + '22' }]}>
-              <Feather name={a.icon} size={22} color={palette.primary} />
+      <FlatList
+        data={folderAlbums}
+        keyExtractor={(a) => a.id}
+        numColumns={2}
+        columnWrapperStyle={{ gap: GAP }}
+        contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: insets.bottom + 110, gap: GAP }}
+        ListHeaderComponent={
+          <View style={{ marginHorizontal: -spacing.lg, gap: spacing.sm }}>
+            <ScreenHeader title="Albums" subtitle={`${folderAlbums.length} folders with photos`} />
+            <View style={styles.smartRow}>
+              <SmartAlbum
+                icon="heart"
+                name="Favorites"
+                count={favoriteItems.length}
+                cover={favoriteItems[0]}
+                onPress={() => open(FAVORITES_ALBUM)}
+              />
+              <SmartAlbum
+                icon="video"
+                name="Videos"
+                count={videoItems.length}
+                cover={videoItems[0]}
+                onPress={() => open(VIDEOS_ALBUM)}
+              />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[type.bodyMd, { color: palette.fg }]}>{a.name}</Text>
-              <Text style={[type.caption, { color: palette.fgVariant }]}>{a.count} items</Text>
-            </View>
-            <Feather name="chevron-right" size={20} color={palette.fgVariant} />
+            <Text style={[type.uppercase, styles.section, { color: palette.fgVariant }]}>Drive folders</Text>
           </View>
-        ))}
-        <View style={{ marginTop: spacing.md }}>
-          <EmptyState icon="folder" title="Drive folders" hint="Folders containing media appear here after indexing." />
-        </View>
-      </ScrollView>
+        }
+        ListEmptyComponent={
+          isLoading ? undefined : (
+            <EmptyState icon="folder" title="No folders yet" hint="Folders containing your photos and videos show up here." />
+          )
+        }
+        renderItem={({ item }) => <FolderAlbumCard album={item} width={cardW} onPress={() => open(item.id)} />}
+      />
     </View>
+  );
+}
+
+function Cover({ item, style }: { item?: MediaItem; style: object }) {
+  const headers = useAuthHeaders();
+  const { palette } = useTheme();
+  return (
+    <View style={[style, { backgroundColor: palette.surfaceAlt, overflow: 'hidden' }]}>
+      {item?.thumbnailUrl ? (
+        <Image
+          source={{ uri: item.thumbnailUrl, headers, cacheKey: `${item.id}-grid` }}
+          cachePolicy="memory-disk"
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={150}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function SmartAlbum({
+  icon,
+  name,
+  count,
+  cover,
+  onPress,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  name: string;
+  count: number;
+  cover?: MediaItem;
+  onPress: () => void;
+}) {
+  const { palette } = useTheme();
+  return (
+    <Pressable onPress={onPress} style={[styles.smart, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <Cover item={cover} style={styles.smartCover} />
+      <View style={{ flex: 1 }}>
+        <View style={styles.smartTitle}>
+          <Feather name={icon} size={14} color={palette.primary} />
+          <Text style={[type.bodyMd, { color: palette.fg }]}>{name}</Text>
+        </View>
+        <Text style={[type.caption, { color: palette.fgVariant }]}>{count.toLocaleString()} items</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function FolderAlbumCard({ album, width, onPress }: { album: FolderAlbum; width: number; onPress: () => void }) {
+  const { palette } = useTheme();
+  return (
+    <Pressable onPress={onPress} style={{ width }}>
+      <Cover item={album.cover} style={[styles.folderCover, { width, height: width }]} />
+      <Text style={[type.bodyMd, { color: palette.fg, marginTop: 8 }]} numberOfLines={1}>
+        {album.name}
+      </Text>
+      <Text style={[type.caption, { color: palette.fgVariant }]} numberOfLines={1}>
+        {album.count.toLocaleString()} · {album.location || 'Shared'}
+      </Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  row: {
+  smartRow: { flexDirection: 'row', gap: GAP, paddingHorizontal: spacing.lg },
+  smart: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
+    gap: 12,
+    padding: 10,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  halo: { width: 48, height: 48, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  smartCover: { width: 52, height: 52, borderRadius: radius.sm },
+  smartTitle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  section: { paddingHorizontal: spacing.lg, marginTop: spacing.md },
+  folderCover: { borderRadius: radius.lg },
 });

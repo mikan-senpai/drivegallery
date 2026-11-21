@@ -8,6 +8,8 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { radius, spacing, type } from '@/theme/tokens';
 import type { ThemePreference } from '@/theme/ThemeProvider';
 import { useSession } from '@/store/session';
+import { clearMediaCaches } from '@/lib/cache';
+import { formatBytes } from '@/lib/format';
 
 const THEME_OPTIONS: { key: ThemePreference; label: string }[] = [
   { key: 'paper', label: 'Paper' },
@@ -61,7 +63,22 @@ export default function Settings() {
         </Section>
 
         <Section title="Storage" palette={palette}>
-          <Row palette={palette} icon="trash-2" label="Clear thumbnail cache" onPress={() => Alert.alert('Cache', 'Thumbnail cache cleared.')} />
+          <Row
+            palette={palette}
+            icon="trash-2"
+            label="Clear cache"
+            onPress={async () => {
+              try {
+                const freed = await clearMediaCaches();
+                Alert.alert(
+                  'Cache cleared',
+                  `Thumbnails will reload from Drive as you scroll.${freed ? ` Freed ${formatBytes(freed)} of shared files.` : ''}`
+                );
+              } catch (e) {
+                Alert.alert('Could not clear cache', e instanceof Error ? e.message : 'Try again.');
+              }
+            }}
+          />
         </Section>
 
         <Section title="Account" palette={palette}>

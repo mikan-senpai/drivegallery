@@ -31,6 +31,7 @@ import { radius, spacing, type } from '@/theme/tokens';
 import { useRemoveMediaItem, useTimeline } from '@/hooks/useMedia';
 import { useFolderSelection } from '@/store/folderSelection';
 import { useSelection } from '@/store/selection';
+import { useFavorites } from '@/store/favorites';
 import { MAX_COLS, MIN_COLS, useGridPrefs } from '@/store/gridPrefs';
 import { useSession } from '@/store/session';
 import { AuthCancelledError, ensureWriteAccess } from '@/lib/auth';
@@ -76,7 +77,8 @@ export default function Timeline() {
   const cols = useGridPrefs((s) => s.cols);
   const stepCols = useGridPrefs((s) => s.step);
   const tileSize = (width - GUTTER * 2) / cols;
-  const listRows = useMemo(() => toListRows(rows, filter, cols), [rows, filter, cols]);
+  const favorites = useFavorites((s) => s.ids);
+  const listRows = useMemo(() => toListRows(rows, filter, cols, favorites), [rows, filter, cols, favorites]);
 
   const listRef = useRef<FlashListRef<ListRow>>(null);
   const scrollerRef = useRef<FastScrollerHandle>(null);
@@ -467,7 +469,12 @@ function ActionButton({
   );
 }
 
-function toListRows(rows: TimelineRow[], filter: MediaFilter, cols: number): ListRow[] {
+function toListRows(
+  rows: TimelineRow[],
+  filter: MediaFilter,
+  cols: number,
+  favorites: Record<string, true>
+): ListRow[] {
   const out: ListRow[] = [];
   let bucket: MediaItem[] = [];
   let headerId = '';
@@ -484,7 +491,7 @@ function toListRows(rows: TimelineRow[], filter: MediaFilter, cols: number): Lis
       flush();
       headerId = row.id;
       out.push({ type: 'header', id: row.id, label: row.label, ts: row.ts });
-    } else if (matches(row.item, filter)) {
+    } else if (matches(row.item, filter, favorites)) {
       bucket.push(row.item);
     }
   }
@@ -492,14 +499,14 @@ function toListRows(rows: TimelineRow[], filter: MediaFilter, cols: number): Lis
   return out.filter((r, i) => !(r.type === 'header' && (out[i + 1]?.type ?? 'header') === 'header'));
 }
 
-function matches(item: MediaItem, filter: MediaFilter): boolean {
+function matches(item: MediaItem, filter: MediaFilter, favorites: Record<string, true>): boolean {
   switch (filter) {
     case 'photos':
       return item.kind === 'photo';
     case 'videos':
       return item.kind === 'video';
     case 'favorites':
-      return Boolean(item.favorite);
+      return Boolean(favorites[item.id]);
     default:
       return true;
   }
