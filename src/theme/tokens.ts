@@ -16,6 +16,8 @@ export interface Palette {
   accent: string;
   border: string;
   bar: string;
+  /** Liquid-glass tint: light enough that the blur behind stays visible. */
+  glass: string;
   destructive: string;
 }
 
@@ -31,6 +33,7 @@ export const palettes: Record<ThemeName, Palette> = {
     accent: '#8c9a8d',
     border: 'rgba(42,40,36,0.12)',
     bar: 'rgba(250,248,243,0.7)',
+    glass: 'rgba(255,255,255,0.18)',
     destructive: '#7f1d1d',
   },
   twilight: {
@@ -44,6 +47,7 @@ export const palettes: Record<ThemeName, Palette> = {
     accent: '#8c9a8d',
     border: 'rgba(234,230,219,0.14)',
     bar: 'rgba(21,20,19,0.72)',
+    glass: 'rgba(32,30,28,0.28)',
     destructive: '#7f1d1d',
   },
 };

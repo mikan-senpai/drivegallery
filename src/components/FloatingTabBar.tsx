@@ -2,61 +2,52 @@ import React from 'react';
 import { View, Pressable, StyleSheet, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, type Href } from 'expo-router';
+import { usePathname, useRouter, type Href } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { GlassView } from '@/components/GlassView';
+import { useBlurTarget } from '@/theme/BlurTarget';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius } from '@/theme/tokens';
 
-/** Minimal shape of the props expo-router's Tabs passes to a custom tabBar. */
-interface TabBarProps {
-  state: { index: number; routes: { key: string; name: string }[] };
-}
+const TABS: { href: Href; path: string; icon: keyof typeof Feather.glyphMap }[] = [
+  { href: '/', path: '/', icon: 'grid' },
+  { href: '/albums', path: '/albums', icon: 'folder' },
+  { href: '/search', path: '/search', icon: 'search' },
+  { href: '/settings', path: '/settings', icon: 'user' },
+];
 
-const ICONS: Record<string, keyof typeof Feather.glyphMap> = {
-  index: 'grid',
-  albums: 'folder',
-  search: 'search',
-  settings: 'user',
-};
-
-const HREFS: Record<string, Href> = {
-  index: '/',
-  albums: '/albums',
-  search: '/search',
-  settings: '/settings',
-};
-
-export function FloatingTabBar({ state }: TabBarProps) {
+/** Rendered by the tabs layout outside the blur target, so it can blur the screens. */
+export function FloatingTabBar() {
   const { palette } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const pathname = usePathname();
+  const blurTarget = useBlurTarget();
 
   return (
     <View style={[styles.wrap, { bottom: insets.bottom + 20 }]} pointerEvents="box-none">
       <View style={styles.shadow}>
-        <GlassView radius={radius.full}>
+        <GlassView radius={radius.full} blurTarget={blurTarget}>
           <View style={styles.row}>
-            {state.routes.map((route, index) => {
-              const focused = state.index === index;
-              const icon = ICONS[route.name] ?? 'circle';
+            {TABS.map((tab) => {
+              const focused = pathname === tab.path;
               const onPress = () => {
                 Haptics.selectionAsync();
-                if (!focused) router.navigate(HREFS[route.name] ?? '/');
+                if (!focused) router.navigate(tab.href);
               };
               return (
-                <Pressable key={route.key} onPress={onPress} style={styles.item} hitSlop={8}>
+                <Pressable key={tab.path} onPress={onPress} style={styles.item} hitSlop={8}>
                   {/* Active tab sits in its own small glass lens. */}
                   <View
                     style={[
                       styles.lens,
                       focused && {
-                        backgroundColor: palette.primary + '26',
-                        borderColor: palette.primary + '55',
+                        backgroundColor: palette.primary + '2e',
+                        borderColor: palette.primary + '66',
                       },
                     ]}
                   >
-                    <Feather name={icon} size={21} color={focused ? palette.primary : palette.fgVariant} />
+                    <Feather name={tab.icon} size={21} color={focused ? palette.primary : palette.fg} />
                   </View>
                 </Pressable>
               );
@@ -73,8 +64,8 @@ const styles = StyleSheet.create({
   shadow: {
     borderRadius: radius.full,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 14 } },
-      android: { elevation: 10 },
+      ios: { shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 24, shadowOffset: { width: 0, height: 12 } },
+      android: { elevation: 8 },
     }),
   },
   row: {
