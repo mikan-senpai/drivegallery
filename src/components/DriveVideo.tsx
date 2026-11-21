@@ -21,9 +21,12 @@ interface Props {
   height: number;
   /** Whether this page is the one on screen. Leaving it stops playback. */
   active: boolean;
+  /** Space taken by the viewer's top bar / bottom actions; the player fits between them. */
+  chromeTop?: number;
+  chromeBottom?: number;
 }
 
-export function DriveVideo({ uri, headers, poster, width, height, active }: Props) {
+export function DriveVideo({ uri, headers, poster, width, height, active, chromeTop = 0, chromeBottom = 0 }: Props) {
   const [started, setStarted] = useState(false);
   const [wasActive, setWasActive] = useState(active);
 
@@ -34,7 +37,13 @@ export function DriveVideo({ uri, headers, poster, width, height, active }: Prop
   }
 
   if (started && active) {
-    return <Player uri={uri} headers={headers} width={width} height={height} />;
+    // Inset the player so its native controls (seek bar, fullscreen) sit above the
+    // viewer's action row instead of underneath it.
+    return (
+      <View style={{ width, height, paddingTop: chromeTop, paddingBottom: chromeBottom }}>
+        <Player uri={uri} headers={headers} width={width} height={height - chromeTop - chromeBottom} />
+      </View>
+    );
   }
 
   return (
@@ -54,7 +63,7 @@ export function DriveVideo({ uri, headers, poster, width, height, active }: Prop
   );
 }
 
-function Player({ uri, headers, width, height }: Omit<Props, 'poster' | 'active'>) {
+function Player({ uri, headers, width, height }: Pick<Props, 'uri' | 'headers' | 'width' | 'height'>) {
   const player = useVideoPlayer({ uri, headers }, (p) => {
     p.play();
   });

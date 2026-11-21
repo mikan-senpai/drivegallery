@@ -26,6 +26,9 @@ export default function Viewer() {
   const initialIndex = useMemo(() => Math.max(0, items.findIndex((i) => i.id === id)), [items, id]);
   const [index, setIndex] = useState(initialIndex);
   const [scrollEnabled, setScrollEnabled] = useState(true);
+  // Measured heights of the top bar and bottom action row; videos fit between them.
+  const [chromeTop, setChromeTop] = useState(0);
+  const [chromeBottom, setChromeBottom] = useState(0);
   const current = items[index];
   const removeFromList = useRemoveMediaItem();
 
@@ -87,7 +90,7 @@ export default function Viewer() {
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         scrollEnabled={scrollEnabled}
         // Re-render pages when the active page changes (stops videos you swipe away from).
-        extraData={index}
+        extraData={`${index}-${chromeTop}-${chromeBottom}`}
         showsHorizontalScrollIndicator={false}
         keyExtractor={(item) => item.id}
         onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
@@ -101,6 +104,8 @@ export default function Viewer() {
                 width={width}
                 height={height}
                 active={i === index}
+                chromeTop={chromeTop}
+                chromeBottom={chromeBottom}
               />
             ) : (
             <ZoomableImage
@@ -119,7 +124,11 @@ export default function Viewer() {
         )}
       />
 
-      <SafeAreaView style={styles.top} pointerEvents="box-none">
+      <SafeAreaView
+        style={styles.top}
+        pointerEvents="box-none"
+        onLayout={(e) => setChromeTop(e.nativeEvent.layout.height)}
+      >
         <Pressable onPress={() => router.back()} hitSlop={12}>
           <Feather name="chevron-left" size={26} color="#fff" />
         </Pressable>
@@ -132,7 +141,11 @@ export default function Viewer() {
         <Feather name="more-vertical" size={22} color="#fff" />
       </SafeAreaView>
 
-      <SafeAreaView style={styles.bottom} pointerEvents="box-none">
+      <SafeAreaView
+        style={styles.bottom}
+        pointerEvents="box-none"
+        onLayout={(e) => setChromeBottom(e.nativeEvent.layout.height)}
+      >
         <Action icon="share" label="Share" onPress={() => Alert.alert('Share', 'Native share sheet (stub).')} />
         <Action icon="heart" label="Favorite" onPress={() => Alert.alert('Favorite', 'Toggled (stub).')} />
         <Action icon="info" label="Info" onPress={info} />
