@@ -1,8 +1,9 @@
-import React from 'react';
-import { View, Pressable, StyleSheet, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Pressable, StyleSheet, Platform, type LayoutChangeEvent } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname, useRouter, type Href } from 'expo-router';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { GlassView } from '@/components/GlassView';
 import { useBlurTarget } from '@/theme/BlurTarget';
@@ -16,73 +17,104 @@ const TABS: { href: Href; path: string; icon: keyof typeof Feather.glyphMap }[] 
   { href: '/settings', path: '/settings', icon: 'user' },
 ];
 
-/** Rendered by the tabs layout outside the blur target, so it can blur the screens. */
+const BAR_HEIGHT = 58;
+/** How far the active lens bulges past the bar, top/bottom and left/right. */
+const LENS_OVERFLOW_Y = 6;
+const LENS_OVERFLOW_X = 4;
+
+/**
+ * iOS 26-style tab bar: a near-clear glass bar with a raised glass lens over the
+ * active tab that springs between tabs. Rendered by the tabs layout outside the
+ * blur target, so both the bar and the lens blur the screens behind them.
+ */
 export function FloatingTabBar() {
   const { palette } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
   const blurTarget = useBlurTarget();
+  const [barWidth, setBarWidth] = useState(0);
+
+  const activeIndex = Math.max(0, TABS.findIndex((t) => t.path === pathname));
+  const itemW = barWidth / TABS.length;
+
+  const lensX = useSharedValue(0);
+  useEffect(() => {
+    if (itemW > 0) lensX.value = withSpring(activeIndex * itemW - LENS_OVERFLOW_X, { damping: 18, stiffness: 180 });
+  }, [activeIndex, itemW, lensX]);
+
+  const lensStyle = useAnimatedStyle(() => ({ transform: [{ translateX: lensX.value }] }));
 
   return (
-    <View style={[styles.wrap, { bottom: insets.bottom + 20 }]} pointerEvents="box-none">
-      <View style={styles.shadow}>
-        <GlassView radius={radius.full} blurTarget={blurTarget}>
-          <View style={styles.row}>
-            {TABS.map((tab) => {
-              const focused = pathname === tab.path;
-              const onPress = () => {
-                Haptics.selectionAsync();
-                if (!focused) router.navigate(tab.href);
-              };
-              return (
-                <Pressable key={tab.path} onPress={onPress} style={styles.item} hitSlop={8}>
-                  {/* Active tab sits in its own small glass lens. */}
-                  <View
-                    style={[
-                      styles.lens,
-                      focused && {
-                        backgroundColor: palette.primary + '2e',
-                        borderColor: palette.primary + '66',
-                      },
-                    ]}
-                  >
-                    <Feather name={tab.icon} size={21} color={focused ? palette.primary : palette.fg} />
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-        </GlassView>
+    <View style={[styles.wrap, { bottom: insets.bottom + 18 }]} pointerEvents="box-none">
+      <View style={styles.bar} onLayout={(e: LayoutChangeEvent) => setBarWidth(e.nativeEvent.layout.width)}>
+        {/* Bar body: nearly clear glass. */}
+        <View style={styles.shadow}>
+          <GlassView radius={radius.full} blurTarget={blurTarget} style={styles.fill} />
+        </View>
+
+        {/* Active lens: a raised glass droplet that bulges past the bar. */}
+        {itemW > 0 && (
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.lens, { width: itemW + LENS_OVERFLOW_X * 2 }, lensStyle]}
+          >
+            <View style={styles.lensShadow}>
+              <GlassView radius={radius.full} blurTarget={blurTarget} style={styles.fill} />
+            </View>
+          </Animated.View>
+        )}
+
+        {/* Icons on top of both glass layers. */}
+        <View style={styles.row}>
+          {TABS.map((tab, i) => {
+            const focused = i === activeIndex;
+            const onPress = () => {
+              Haptics.selectionAsync();
+              if (!focused) router.navigate(tab.href);
+            };
+            return (
+              <Pressable key={tab.path} onPress={onPress} style={styles.item} hitSlop={6}>
+                <Feather name={tab.icon} size={22} color={focused ? palette.fg : palette.fgVariant} />
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: 'absolute', left: 24, right: 24 },
+  wrap: { position: 'absolute', left: 22, right: 22 },
+  bar: { height: BAR_HEIGHT },
+  fill: { flex: 1 },
   shadow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     borderRadius: radius.full,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 24, shadowOffset: { width: 0, height: 12 } },
-      android: { elevation: 8 },
+      ios: { shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 20, shadowOffset: { width: 0, height: 10 } },
+      android: {},
     }),
   },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-  },
-  item: { flex: 1, alignItems: 'center' },
   lens: {
-    width: 56,
-    height: 40,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'transparent',
+    position: 'absolute',
+    left: 0,
+    top: -LENS_OVERFLOW_Y,
+    bottom: -LENS_OVERFLOW_Y,
   },
+  lensShadow: {
+    flex: 1,
+    borderRadius: radius.full,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+      android: {},
+    }),
+  },
+  row: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center' },
+  item: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'center' },
 });
