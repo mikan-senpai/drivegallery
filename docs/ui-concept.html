@@ -1,0 +1,199 @@
+<title>DriveGallery UI</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500&family=Outfit:wght@300;400;500&display=swap">
+<style>
+/* Twilight Stillness, minimal. Two app themes (Paper/Twilight) toggled live. */
+:root{
+  --page-bg:#f3efe6; --page-fg:#2a2824; --page-muted:#8a8276; --line:rgba(0,0,0,.1);
+  --fserif:'Lora',Georgia,serif; --fsans:'Outfit',system-ui,sans-serif;
+  /* app theme tokens (JS sets; default Paper) */
+  --bg:#faf8f3; --surface:#ffffff; --salt:#ece7dc; --fg:#2a2824; --fgv:#8a8276;
+  --primary:#9c8a6b; --onpri:#ffffff; --accent:#8c9a8d; --border:rgba(42,40,36,.12);
+  --bar:rgba(250,248,243,.7); --glow:transparent;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page-bg:#151413; --page-fg:#eae6db; --page-muted:#9a9893; --line:rgba(255,255,255,.12); color-scheme:dark;
+}}
+:root[data-theme="dark"]{--page-bg:#151413; --page-fg:#eae6db; --page-muted:#9a9893; --line:rgba(255,255,255,.12); color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page-bg);color:var(--page-fg);font-family:var(--fsans);font-weight:300;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:34px}
+.wrap{max-width:1120px;margin:0 auto}
+h1{font-family:var(--fserif);font-weight:400;font-size:clamp(26px,5vw,34px);letter-spacing:.01em;margin:0 0 20px}
+.toggle{display:inline-flex;gap:3px;background:var(--salt);border:1px solid var(--line);border-radius:999px;padding:4px;margin:0 0 30px}
+.toggle button{border:0;background:transparent;font:inherit;font-weight:400;font-size:13px;color:var(--page-muted);padding:7px 18px;border-radius:999px;cursor:pointer;letter-spacing:.02em}
+.toggle button.on{background:var(--page-fg);color:var(--page-bg)}
+
+.stage{display:flex;flex-wrap:wrap;gap:26px;justify-content:center;align-items:flex-start}
+.phone{width:264px;max-width:100%;border-radius:44px;background:#000;padding:9px;box-shadow:0 26px 54px -18px rgba(0,0,0,.45);flex:0 0 auto}
+.screen{position:relative;border-radius:36px;overflow:hidden;background:var(--bg);color:var(--fg);height:552px;display:flex;flex-direction:column}
+.aura{position:absolute;width:220px;height:220px;border-radius:50%;background:var(--primary);opacity:.06;filter:blur(90px);pointer-events:none;z-index:0}
+.cap{text-align:center;font-size:12px;color:var(--page-muted);margin-top:11px;letter-spacing:.04em;text-transform:uppercase;font-weight:400}
+
+.notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:84px;height:21px;background:#000;border-radius:0 0 13px 13px;z-index:6}
+.status{display:flex;justify-content:space-between;align-items:center;padding:11px 20px 4px;font-size:11.5px;font-weight:400;color:var(--fg);z-index:2}
+.shead{padding:8px 20px 12px;display:flex;align-items:flex-end;justify-content:space-between;z-index:2}
+.shead .t{font-family:var(--fserif);font-weight:400;font-size:23px;letter-spacing:.01em}
+.shead .s{font-size:12px;color:var(--fgv);margin-top:2px}
+.circ{width:34px;height:34px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--fg)}
+.av{width:34px;height:34px;border-radius:50%;background:var(--salt);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:400;color:var(--fg)}
+
+/* chips row (segmented) */
+.chips{display:flex;gap:7px;padding:2px 20px 14px;z-index:2}
+.chip{border:1px solid var(--border);background:transparent;color:var(--fgv);font:inherit;font-weight:400;font-size:12px;padding:7px 16px;border-radius:999px;letter-spacing:.02em;cursor:pointer}
+.chip.on{background:var(--primary);color:var(--onpri);border-color:transparent}
+
+.scroll{flex:1;overflow:hidden;padding:0 14px 92px;z-index:1}
+.day{font-size:10px;font-weight:300;color:var(--fgv);margin:4px 6px 8px;letter-spacing:.18em;text-transform:uppercase}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:16px}
+.tile{aspect-ratio:1;border-radius:16px;background-size:cover;position:relative;overflow:hidden}
+.tile.wide{grid-column:span 2;aspect-ratio:2/1}
+.badge{position:absolute;right:6px;bottom:5px;font-size:9px;font-weight:400;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.cl{position:absolute;left:6px;top:6px;opacity:.9}
+
+/* floating tab bar */
+.navwrap{position:absolute;left:24px;right:24px;bottom:calc(26px + env(safe-area-inset-bottom,0px));z-index:5}
+.nav{display:flex;justify-content:space-between;align-items:center;background:var(--bar);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid var(--border);border-radius:999px;padding:13px 26px;box-shadow:0 22px 44px -16px rgba(0,0,0,.5)}
+.nav a{display:flex;flex-direction:column;align-items:center;gap:5px;color:var(--fgv);text-decoration:none}
+.nav a .dot{width:4px;height:4px;border-radius:50%;background:transparent}
+.nav a.on{color:var(--primary)}
+.nav a.on svg{filter:drop-shadow(0 0 7px var(--primary))}
+.nav a.on .dot{background:var(--primary)}
+
+/* viewer */
+.viewer{flex:1;position:relative;background:#000}
+.photo{position:absolute;inset:0;background-size:cover;background-position:center}
+.vtop{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:13px 18px;background:linear-gradient(rgba(0,0,0,.5),transparent);z-index:2}
+.vtop *{color:#fff}
+.vpill{display:flex;align-items:center;gap:6px;font-size:9.5px;font-weight:300;letter-spacing:.14em;text-transform:uppercase;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);padding:5px 11px;border-radius:999px;backdrop-filter:blur(8px)}
+.strip{position:absolute;bottom:72px;left:0;right:0;display:flex;gap:5px;padding:0 16px;z-index:2}
+.strip .f{height:42px;flex:1;border-radius:11px;background-size:cover;opacity:.5}
+.strip .f.sel{opacity:1;outline:1.5px solid #fff;outline-offset:1px}
+.vbot{position:absolute;bottom:0;left:0;right:0;padding:16px 26px calc(18px + env(safe-area-inset-bottom,0px));background:linear-gradient(transparent,rgba(0,0,0,.55));display:flex;justify-content:space-between;z-index:2}
+.vbot button{background:none;border:0;color:#fff;display:flex;flex-direction:column;align-items:center;gap:5px;font-size:9px;font-weight:300;letter-spacing:.04em;cursor:pointer}
+
+/* connect */
+.connect{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:26px;gap:14px;z-index:1}
+.logo{width:72px;height:72px;border-radius:24px;background:var(--primary);display:flex;align-items:center;justify-content:center}
+.connect h2{font-family:var(--fserif);font-weight:400;font-size:25px;margin:6px 0 0;letter-spacing:.01em}
+.connect p{color:var(--fgv);font-size:13px;line-height:1.55;margin:0;max-width:30ch}
+.feats{display:flex;flex-direction:column;gap:9px;width:100%;margin:4px 0}
+.feat{display:flex;gap:11px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:13px 15px;text-align:left}
+.feat svg{color:var(--primary);flex:0 0 auto}
+.feat span{font-size:12px;color:var(--fg);font-weight:300;line-height:1.4}
+.cta{width:100%;background:var(--primary);color:var(--onpri);border:0;border-radius:999px;padding:14px;font:inherit;font-weight:400;font-size:13.5px;letter-spacing:.02em;display:flex;align-items:center;justify-content:center;gap:9px;cursor:pointer}
+.ghost{color:var(--fgv);font-size:11px;font-weight:300;letter-spacing:.02em}
+svg{display:block}
+</style>
+
+<div class="wrap">
+  <h1>DriveGallery</h1>
+  <div class="toggle" id="toggle">
+    <button data-t="paper" class="on">Paper</button>
+    <button data-t="twilight">Twilight</button>
+  </div>
+
+  <div class="stage">
+    <!-- Connect -->
+    <div>
+      <div class="phone"><div class="screen">
+        <div class="aura" style="top:-60px;right:-70px"></div>
+        <div class="notch"></div>
+        <div class="status"><span>9:41</span><span>5G&nbsp;&nbsp;86%</span></div>
+        <div class="connect">
+          <div class="logo"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--onpri)" stroke-width="1.2" stroke-linejoin="round"><path d="M7.8 3h8.4l4.8 8.3-4.2 7.4H7.2L3 11.3 7.8 3Z"/><circle cx="12" cy="11" r="2.4"/></svg></div>
+          <h2>DriveGallery</h2>
+          <p>Your Drive photos, as a gallery. Files never leave Drive.</p>
+          <div class="feats">
+            <div class="feat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M12 3l7 4v5c0 4-3 6.5-7 9-4-2.5-7-5-7-9V7l7-4Z"/><path d="M9 12l2 2 4-4"/></svg><span>Read-only. Revoke anytime from Google.</span></div>
+            <div class="feat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg><span>Timeline and folder views.</span></div>
+          </div>
+          <button class="cta"><svg width="17" height="17" viewBox="0 0 24 24"><path fill="currentColor" d="M12 11v2.8h4.9c-.2 1.3-1.6 3.9-4.9 3.9A4.7 4.7 0 0 1 12 7.3c1.5 0 2.5.6 3 1.1l2-2A7.6 7.6 0 0 0 12 4.3 7.7 7.7 0 1 0 19.6 12c0-.5 0-.7-.1-1H12Z"/></svg>Connect Google Drive</button>
+          <span class="ghost">Secure sign-in via Google</span>
+        </div>
+      </div></div>
+      <div class="cap">Connect</div>
+    </div>
+
+    <!-- Timeline -->
+    <div>
+      <div class="phone"><div class="screen">
+        <div class="aura" style="bottom:40px;left:-80px"></div>
+        <div class="notch"></div>
+        <div class="status"><span>9:41</span><span>5G&nbsp;&nbsp;86%</span></div>
+        <div class="shead">
+          <div><div class="t">Photos</div><div class="s">4,812 in Drive</div></div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div class="circ"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg></div>
+            <div class="av">SA</div>
+          </div>
+        </div>
+        <div class="chips"><button class="chip on">Timeline</button><button class="chip">Albums</button><button class="chip">Folders</button></div>
+        <div class="scroll">
+          <div class="day">Today</div>
+          <div class="grid" data-n="5" data-wide="1"></div>
+          <div class="day">Yesterday</div>
+          <div class="grid" data-n="6"></div>
+        </div>
+        <div class="navwrap"><div class="nav">
+          <a class="on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg><span class="dot"></span></a>
+          <a><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 8h16v11H4z"/><path d="M4 8l2.5-3h5L14 8"/></svg><span class="dot"></span></a>
+          <a><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg><span class="dot"></span></a>
+          <a><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.4-4 12.6-4 14 0"/></svg><span class="dot"></span></a>
+        </div></div>
+      </div></div>
+      <div class="cap">Timeline</div>
+    </div>
+
+    <!-- Viewer -->
+    <div>
+      <div class="phone"><div class="screen">
+        <div class="notch"></div>
+        <div class="viewer">
+          <div class="photo" id="big"></div>
+          <div class="vtop">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="m15 18-6-6 6-6"/></svg>
+            <span class="vpill"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 18a4 4 0 0 1-.5-8 5 5 0 0 1 9.5-1.5A3.5 3.5 0 0 1 16.5 18H7Z"/></svg>In Drive · 4.2 MB</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="19" r="1.3"/></svg>
+          </div>
+          <div class="strip" id="strip"></div>
+          <div class="vbot">
+            <button><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 12v7h16v-7"/><path d="M8 8l4-4 4 4M12 4v12"/></svg>Share</button>
+            <button><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M20.8 4.6a5 5 0 0 0-7 0L12 6.3l-1.8-1.7a5 5 0 1 0-7 7L12 21l8.8-9.4a5 5 0 0 0 0-7Z"/></svg>Favorite</button>
+            <button><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 1.5"/></svg>Info</button>
+            <button><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>Remove</button>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap">Full view</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const THEMES={
+  paper:{bg:'#faf8f3',surface:'#ffffff',salt:'#ece7dc',fg:'#2a2824',fgv:'#8a8276',primary:'#9c8a6b',onpri:'#ffffff',accent:'#8c9a8d',border:'rgba(42,40,36,.12)',bar:'rgba(250,248,243,.7)'},
+  twilight:{bg:'#151413',surface:'rgba(31,30,29,.55)',salt:'#2a2927',fg:'#eae6db',fgv:'#9a9893',primary:'#c9bba5',onpri:'#151413',accent:'#8c9a8d',border:'rgba(234,230,219,.14)',bar:'rgba(21,20,19,.72)'}
+};
+const root=document.documentElement;
+function theme(name){
+  const t=THEMES[name];
+  for(const k in t) root.style.setProperty('--'+k,t[k]);
+  document.querySelectorAll('#toggle button').forEach(b=>b.classList.toggle('on',b.dataset.t===name));
+}
+document.querySelectorAll('#toggle button').forEach(b=>b.onclick=()=>theme(b.dataset.t));
+
+// muted, misty placeholder photos
+const G=['linear-gradient(155deg,#e8d9c4,#cbb79a)','linear-gradient(155deg,#b8c4cc,#8795a1)','linear-gradient(155deg,#a7b6a9,#5a6b5e)','linear-gradient(155deg,#d6cabc,#a89a86)','linear-gradient(155deg,#c7d0d4,#9aa7ab)','linear-gradient(155deg,#e0cdba,#b89a84)','linear-gradient(155deg,#aeb9ac,#6f7d6f)','linear-gradient(155deg,#cdc3b4,#9f948a)','linear-gradient(155deg,#bcc8cc,#879399)'];
+const cloud=`<svg class="cl" width="15" height="15" viewBox="0 0 24 24" fill="rgba(255,255,255,.92)"><path d="M7 18a4 4 0 0 1-.5-8 5 5 0 0 1 9.5-1.5A3.5 3.5 0 0 1 16.5 18H7Z"/></svg>`;
+let i=0;const nx=()=>G[(i++)%G.length];
+document.querySelectorAll('.grid').forEach(g=>{
+  const n=+g.dataset.n,w=g.dataset.wide;
+  for(let k=0;k<n;k++){const t=document.createElement('div');t.className='tile'+(w&&k===0?' wide':'');t.style.backgroundImage=nx();t.innerHTML=cloud+(k%4===2?'<span class="badge">▶ 0:14</span>':'');g.appendChild(t);}
+});
+document.getElementById('big').style.backgroundImage='linear-gradient(160deg,#d9b89a,#8b6f58)';
+const strip=document.getElementById('strip');
+[G[2],G[0],G[6],G[4],G[8]].forEach((g,k)=>{const f=document.createElement('div');f.className='f'+(k===0?' sel':'');f.style.backgroundImage=g;strip.appendChild(f);});
+theme('paper');
+</script>

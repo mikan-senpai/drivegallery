@@ -1,0 +1,37 @@
+/** Domain types shared across the Drive layer and UI. */
+
+export interface MediaItem {
+  id: string;
+  name: string;
+  mimeType: string;
+  kind: 'photo' | 'video';
+  sizeBytes?: number;
+  /** Best-known capture/creation time, ms epoch. */
+  takenAt: number;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+  thumbnailUrl?: string;
+  parents?: string[];
+  favorite?: boolean;
+}
+
+export interface DriveFolder {
+  id: string;
+  name: string;
+  count: number;
+  coverThumbnailUrl?: string;
+}
+
+export interface Page<T> {
+  items: T[];
+  nextPageToken?: string;
+}
+
+export interface GoogleTokens {
+  accessToken: string;
+  /** ms epoch when accessToken expires. */
+  expiresAt: number;
+  idToken?: string;
+  email?: string;
+}
