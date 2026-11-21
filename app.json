@@ -6,14 +6,12 @@
     "scheme": "drivegallery",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mikansenpai.drivegallery"
     },
     "android": {
-      "package": "com.mikansenpai.drivegallery",
-      "edgeToEdgeEnabled": true
+      "package": "com.mikansenpai.drivegallery"
     },
     "plugins": [
       "expo-router",
