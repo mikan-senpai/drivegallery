@@ -5,7 +5,7 @@ import { useSession } from '@/store/session';
 
 export default function TabsLayout() {
   const status = useSession((s) => s.status);
-  if (status === 'signedOut') return <Redirect href="/" />;
+  if (status === 'signedOut') return <Redirect href="/connect" />;
 
   return (
     <Tabs

@@ -27,7 +27,7 @@ function Navigator() {
     <>
       <StatusBar style={name === 'twilight' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.bg } }}>
-        <Stack.Screen name="index" />
+        <Stack.Screen name="connect" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="photo/[id]" options={{ presentation: 'transparentModal', animation: 'fade' }} />
       </Stack>

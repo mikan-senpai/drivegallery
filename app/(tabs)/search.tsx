@@ -55,7 +55,6 @@ export default function Search() {
         <FlashList
           data={rows}
           keyExtractor={(_, i) => `r${i}`}
-          estimatedItemSize={tileSize}
           contentContainerStyle={{ paddingHorizontal: GUTTER, paddingBottom: insets.bottom + 110 }}
           ListEmptyComponent={<EmptyState icon="image" title="No matches" hint={`Nothing named "${q}".`} />}
           renderItem={({ item: row }) => (

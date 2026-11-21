@@ -18,7 +18,7 @@ export default function Connect() {
   const { status, connect, enterDemo } = useSession();
   const [busy, setBusy] = useState(false);
 
-  if (status === 'signedIn') return <Redirect href="/(tabs)" />;
+  if (status === 'signedIn') return <Redirect href="/" />;
 
   const onConnect = async () => {
     setBusy(true);

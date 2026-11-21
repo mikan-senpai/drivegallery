@@ -3,10 +3,15 @@ import { View, Pressable, StyleSheet, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter, type Href } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius } from '@/theme/tokens';
+
+/** Minimal shape of the props expo-router's Tabs passes to a custom tabBar. */
+interface TabBarProps {
+  state: { index: number; routes: { key: string; name: string }[] };
+}
 
 const ICONS: Record<string, keyof typeof Feather.glyphMap> = {
   index: 'grid',
@@ -15,9 +20,17 @@ const ICONS: Record<string, keyof typeof Feather.glyphMap> = {
   settings: 'user',
 };
 
-export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
+const HREFS: Record<string, Href> = {
+  index: '/',
+  albums: '/albums',
+  search: '/search',
+  settings: '/settings',
+};
+
+export function FloatingTabBar({ state }: TabBarProps) {
   const { palette, name } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   return (
     <View style={[styles.wrap, { bottom: insets.bottom + 20 }]} pointerEvents="box-none">
@@ -31,8 +44,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
           const icon = ICONS[route.name] ?? 'circle';
           const onPress = () => {
             Haptics.selectionAsync();
-            const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-            if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
+            if (!focused) router.navigate(HREFS[route.name] ?? '/');
           };
           return (
             <Pressable key={route.key} onPress={onPress} style={styles.item} hitSlop={8}>

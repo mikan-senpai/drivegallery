@@ -40,7 +40,6 @@ export default function Timeline() {
       <FlashList
         data={listRows}
         keyExtractor={(r) => r.id}
-        estimatedItemSize={tileSize}
         getItemType={(r) => r.type}
         contentContainerStyle={{ paddingHorizontal: GUTTER, paddingBottom: insets.bottom + 110 }}
         refreshControl={<RefreshControl refreshing={false} onRefresh={refetch} tintColor={palette.fgVariant} />}

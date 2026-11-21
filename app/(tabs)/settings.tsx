@@ -29,7 +29,7 @@ export default function Settings() {
         style: 'destructive',
         onPress: async () => {
           await disconnect();
-          router.replace('/');
+          router.replace('/connect');
         },
       },
     ]);
@@ -62,7 +62,7 @@ export default function Settings() {
 
         <Section title="Account" palette={palette}>
           {demoMode ? (
-            <Row palette={palette} icon="log-in" label="Connect real Drive" onPress={() => router.replace('/')} />
+            <Row palette={palette} icon="log-in" label="Connect real Drive" onPress={() => router.replace('/connect')} />
           ) : (
             <Row palette={palette} icon="log-out" label="Disconnect" destructive onPress={onDisconnect} />
           )}
