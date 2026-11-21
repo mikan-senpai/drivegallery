@@ -39,7 +39,7 @@ export function GlassView({ children, style, radius = 28, intensity = 80, blurTa
       <BlurView
         intensity={intensity}
         tint={tint}
-        blurMethod={androidBlur ? 'dimezisBlurViewSdk31Plus' : 'none'}
+        blurMethod={androidBlur ? 'dimezisBlurView' : 'none'}
         blurTarget={androidBlur ? blurTarget : undefined}
         blurReductionFactor={2.5}
         style={StyleSheet.absoluteFill}
@@ -48,16 +48,16 @@ export function GlassView({ children, style, radius = 28, intensity = 80, blurTa
       <View style={[StyleSheet.absoluteFill, { backgroundColor: palette.glass }]} pointerEvents="none" />
       {/* Top specular sheen. */}
       <LinearGradient
-        colors={dark ? ['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.7)', 'rgba(255,255,255,0)']}
+        colors={dark ? ['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.3)', 'rgba(255,255,255,0)']}
         start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 0.55 }}
+        end={{ x: 0, y: 0.45 }}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
       {children}
       {/* Soft bottom edge glow — the "refraction" lip liquid glass has. */}
       <LinearGradient
-        colors={['rgba(255,255,255,0)', dark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.35)']}
+        colors={['rgba(255,255,255,0)', dark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.14)']}
         start={{ x: 0, y: 0.6 }}
         end={{ x: 0, y: 1 }}
         style={StyleSheet.absoluteFill}

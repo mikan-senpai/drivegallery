@@ -33,7 +33,7 @@ export const palettes: Record<ThemeName, Palette> = {
     accent: '#8c9a8d',
     border: 'rgba(42,40,36,0.12)',
     bar: 'rgba(250,248,243,0.7)',
-    glass: 'rgba(255,255,255,0.18)',
+    glass: 'rgba(255,255,255,0.1)',
     destructive: '#7f1d1d',
   },
   twilight: {

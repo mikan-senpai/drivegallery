@@ -106,13 +106,6 @@ export default function Timeline() {
         }
       />
 
-      {/* Fade the grid out behind the floating tab bar. */}
-      <LinearGradient
-        colors={['transparent', palette.bg]}
-        style={[styles.bottomFade, { height: insets.bottom + 80 }]}
-        pointerEvents="none"
-      />
-
       {/* Status-bar scrim — keeps the clock legible while the header is hidden. */}
       <LinearGradient
         colors={[palette.bg, palette.bg + '00']}
@@ -199,7 +192,6 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   headerWrap: { position: 'absolute', top: 0, left: 0, right: 0 },
   topScrim: { position: 'absolute', top: 0, left: 0, right: 0 },
-  bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   gear: { width: 38, height: 38 },
   gearInner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   day: { marginHorizontal: 6, marginTop: spacing.sm, marginBottom: spacing.sm },
