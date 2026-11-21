@@ -1,17 +1,16 @@
 /**
- * Liquid-glass surface (Apple iOS 26 style approximation).
+ * Liquid-glass surface.
  *
- * The look comes from the EDGE, not the fill:
- *  - body: nearly clear — light blur, almost no tint, so colour behind shows through
- *  - outer rim: directional light — brightest on top, softer bottom, faint sides
- *  - inner rim: a faint second line just inside, which reads as a lens edge
+ * Modelled on clear "liquid glass" UI: the background stays almost SHARP
+ * through the glass — the material is a thin neutral tint, a crisp hairline
+ * edge, and slight inner shading at the edges that suggests lens thickness.
  *
- * Native Liquid Glass isn't exposed through Expo yet; this reproduces it with
- * expo-blur + per-side border colours (no extra dependencies).
+ * Not reproduced: true refraction (the background bending at the glass edge).
+ * That needs a GPU shader sampling the pixels behind the view — available as
+ * native Liquid Glass on iOS 26 (expo-glass-effect) or a custom AGSL module on
+ * Android, both requiring a development build.
  *
- * Android: pass `blurTarget` (see BlurTarget.tsx) for a real blur. Without it
- * Android shows the tint only, so use it for glass that floats OUTSIDE the
- * blurred content.
+ * Android: pass `blurTarget` (see BlurTarget.tsx) for the slight softening blur.
  */
 import React from 'react';
 import { View, StyleSheet, Platform, type StyleProp, type ViewStyle } from 'react-native';
@@ -32,38 +31,39 @@ export function GlassView({ children, style, radius = 28, blurTarget }: Props) {
   const dark = name === 'twilight';
   const isAndroid = Platform.OS === 'android';
   const androidBlur = isAndroid && blurTarget;
-
-  const tint: BlurTint = isAndroid ? (dark ? 'dark' : 'light') : dark ? 'systemUltraThinMaterialDark' : 'systemUltraThinMaterialLight';
-
-  // Edge light. Light theme gets a slightly stronger top so it reads on pale content.
-  const rim = dark
-    ? { top: 'rgba(255,255,255,0.7)', bottom: 'rgba(255,255,255,0.32)', side: 'rgba(255,255,255,0.18)' }
-    : { top: 'rgba(255,255,255,0.95)', bottom: 'rgba(255,255,255,0.55)', side: 'rgba(255,255,255,0.4)' };
+  const tint: BlurTint = isAndroid ? 'default' : dark ? 'dark' : 'light';
 
   return (
     <View style={[{ borderRadius: radius, overflow: 'hidden' }, style]}>
       <BlurView
-        // Android: intensity also sets an opaque tint (alpha ≈ intensity × 0.7), so keep it
-        // low and use the reduction factor for a ~10px blur. iOS: ultra-thin material.
-        intensity={isAndroid ? 14 : 40}
+        // Barely-there softening (~2–3px). On Android intensity also adds a tint
+        // overlay (alpha ≈ intensity × 0.44 for 'default'), so it stays tiny.
+        intensity={isAndroid ? 4 : 12}
         tint={tint}
         blurMethod={androidBlur ? 'dimezisBlurView' : 'none'}
         blurTarget={androidBlur ? blurTarget : undefined}
-        blurReductionFactor={1.4}
+        blurReductionFactor={1.5}
         style={StyleSheet.absoluteFill}
       />
-      {/* Near-clear body tint. */}
+      {/* Neutral grey film: greys out light areas, lifts dark ones — like real glass. */}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: palette.glass }]} pointerEvents="none" />
-      {/* A whisper of top light — the rim does the real work. */}
+      {/* Edge thickness: faint inner shading at top, faint light at bottom. */}
       <LinearGradient
-        colors={dark ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)']}
+        colors={['rgba(0,0,0,0.14)', 'rgba(0,0,0,0)']}
         start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 0.5 }}
+        end={{ x: 0, y: 0.28 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <LinearGradient
+        colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.07)']}
+        start={{ x: 0, y: 0.72 }}
+        end={{ x: 0, y: 1 }}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
       {children}
-      {/* Outer rim: directional light catch. */}
+      {/* Crisp hairline edge, a touch brighter on top. */}
       <View
         pointerEvents="none"
         style={[
@@ -71,38 +71,13 @@ export function GlassView({ children, style, radius = 28, blurTarget }: Props) {
           {
             borderRadius: radius,
             borderWidth: 1,
-            borderTopColor: rim.top,
-            borderBottomColor: rim.bottom,
-            borderLeftColor: rim.side,
-            borderRightColor: rim.side,
-          },
-        ]}
-      />
-      {/* Inner rim: faint second line → lens edge. */}
-      <View
-        pointerEvents="none"
-        style={[
-          styles.inner,
-          {
-            borderRadius: Math.max(0, radius - 1),
-            borderTopColor: dark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.4)',
-            borderBottomColor: dark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.2)',
+            borderTopColor: dark ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.7)',
+            borderBottomColor: dark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.45)',
+            borderLeftColor: dark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.55)',
+            borderRightColor: dark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.55)',
           },
         ]}
       />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  inner: {
-    position: 'absolute',
-    top: 1,
-    left: 1,
-    right: 1,
-    bottom: 1,
-    borderWidth: 1,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-  },
-});
