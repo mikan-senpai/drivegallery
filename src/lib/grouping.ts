@@ -2,8 +2,13 @@
 import type { MediaItem } from './types';
 
 export type TimelineRow =
-  | { type: 'header'; id: string; label: string }
+  | { type: 'header'; id: string; label: string; ts: number }
   | { type: 'item'; id: string; item: MediaItem };
+
+/** "November 2024" — the fast-scroll date bubble label. */
+export function monthLabel(ts: number): string {
+  return new Date(ts).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
 
 export function groupByDay(items: MediaItem[]): TimelineRow[] {
   const sorted = [...items].sort((a, b) => b.takenAt - a.takenAt);
@@ -14,7 +19,7 @@ export function groupByDay(items: MediaItem[]): TimelineRow[] {
     const key = dayKey(item.takenAt);
     if (key !== currentKey) {
       currentKey = key;
-      rows.push({ type: 'header', id: `h-${key}`, label: dayLabel(item.takenAt) });
+      rows.push({ type: 'header', id: `h-${key}`, label: dayLabel(item.takenAt), ts: item.takenAt });
     }
     rows.push({ type: 'item', id: item.id, item });
   }

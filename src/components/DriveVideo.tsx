@@ -65,6 +65,7 @@ export function DriveVideo({ uri, headers, poster, width, height, active, chrome
 
 function Player({ uri, headers, width, height }: Pick<Props, 'uri' | 'headers' | 'width' | 'height'>) {
   const player = useVideoPlayer({ uri, headers }, (p) => {
+    p.loop = true;
     p.play();
   });
   return <VideoView player={player} style={{ width, height }} contentFit="contain" nativeControls />;

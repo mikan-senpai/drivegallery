@@ -9,7 +9,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Feather } from '@expo/vector-icons';
@@ -20,18 +20,23 @@ import { FilterChips, type MediaFilter } from '@/components/FilterChips';
 import { PhotoTile } from '@/components/PhotoTile';
 import { EmptyState } from '@/components/EmptyState';
 import { GlassView } from '@/components/GlassView';
+import { FastScroller, type FastScrollerHandle } from '@/components/FastScroller';
 import { useTheme } from '@/theme/ThemeProvider';
 import { spacing, type } from '@/theme/tokens';
 import { useTimeline } from '@/hooks/useMedia';
 import type { MediaItem } from '@/lib/types';
-import type { TimelineRow } from '@/lib/grouping';
+import { monthLabel, type TimelineRow } from '@/lib/grouping';
 
 const COLS = 3;
 const GUTTER = 14;
+/** Fixed date-header height, so scroll offsets map exactly onto rows (fast scroller). */
+const DAY_H = 34;
 /** Scroll distance (px) in one direction before the header reacts — avoids jitter. */
 const SCROLL_THRESHOLD = 8;
 
-type ListRow = { type: 'header'; id: string; label: string } | { type: 'row'; id: string; items: MediaItem[] };
+type ListRow =
+  | { type: 'header'; id: string; label: string; ts: number }
+  | { type: 'row'; id: string; items: MediaItem[] };
 
 export default function Timeline() {
   const { palette } = useTheme();
@@ -51,13 +56,49 @@ export default function Timeline() {
   const listRows = useMemo(() => toListRows(rows, filter), [rows, filter]);
   const open = (item: MediaItem) => router.push({ pathname: '/photo/[id]', params: { id: item.id } });
 
+  const listRef = useRef<FlashListRef<ListRow>>(null);
+  const scrollerRef = useRef<FastScrollerHandle>(null);
+
+  // Start offset of every row. Row heights are fixed (DAY_H / tileSize), so this is exact.
+  const rowOffsets = useMemo(() => {
+    const offsets: number[] = new Array(listRows.length);
+    let y = headerH;
+    for (let i = 0; i < listRows.length; i++) {
+      offsets[i] = y;
+      y += listRows[i].type === 'header' ? DAY_H : tileSize;
+    }
+    return offsets;
+  }, [listRows, headerH, tileSize]);
+
+  /** Month of the row at the top of the visible area for a scroll offset. */
+  const labelForOffset = (offset: number): string | null => {
+    const target = offset + headerH;
+    let lo = 0;
+    let hi = rowOffsets.length - 1;
+    let at = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (rowOffsets[mid] <= target) {
+        at = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    for (let i = at; i >= 0; i--) {
+      const r = listRows[i];
+      if (r.type === 'header') return monthLabel(r.ts);
+    }
+    return null;
+  };
+
   // Header visibility: 1 = shown, 0 = hidden. Hide on scroll down, reveal on scroll up.
   const shown = useSharedValue(1);
   const lastY = useRef(0);
   const shownRef = useRef(1);
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = e.nativeEvent.contentOffset.y;
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    scrollerRef.current?.update(contentOffset.y, contentSize.height, layoutMeasurement.height);
+    const y = contentOffset.y;
     const dy = y - lastY.current;
     lastY.current = y;
 
@@ -80,6 +121,7 @@ export default function Timeline() {
   return (
     <View style={[styles.container, { backgroundColor: palette.bg }]}>
       <FlashList
+        ref={listRef}
         data={listRows}
         style={styles.list}
         keyExtractor={(r) => r.id}
@@ -103,7 +145,9 @@ export default function Timeline() {
         }
         renderItem={({ item: row }) =>
           row.type === 'header' ? (
-            <Text style={[type.uppercase, styles.day, { color: palette.fgVariant }]}>{row.label}</Text>
+            <View style={styles.dayRow}>
+              <Text style={[type.uppercase, styles.day, { color: palette.fgVariant }]}>{row.label}</Text>
+            </View>
           ) : (
             <View style={styles.gridRow}>
               {row.items.map((m) => (
@@ -150,6 +194,15 @@ export default function Timeline() {
         {/* The fade lives below the controls: photos dissolve into the header here. */}
         <LinearGradient colors={[palette.bg, palette.bg + '00']} style={styles.headerFade} pointerEvents="none" />
       </Animated.View>
+
+      {/* Samsung-style fast scroller: drag the handle to fly through the timeline. */}
+      <FastScroller
+        ref={scrollerRef}
+        top={headerH + 4}
+        bottom={insets.bottom + 100}
+        onSeek={(offset) => listRef.current?.scrollToOffset({ offset, animated: false })}
+        labelForOffset={labelForOffset}
+      />
     </View>
   );
 }
@@ -170,7 +223,7 @@ function toListRows(rows: TimelineRow[], filter: MediaFilter): ListRow[] {
     if (row.type === 'header') {
       flush();
       headerId = row.id;
-      out.push({ type: 'header', id: row.id, label: row.label });
+      out.push({ type: 'header', id: row.id, label: row.label, ts: row.ts });
     } else if (matches(row.item, filter)) {
       bucket.push(row.item);
     }
@@ -203,6 +256,7 @@ const styles = StyleSheet.create({
   headerFade: { height: 26 },
   gear: { width: 38, height: 38 },
   gearInner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  day: { marginHorizontal: 6, marginTop: spacing.sm, marginBottom: spacing.sm },
+  dayRow: { height: DAY_H, justifyContent: 'center' },
+  day: { marginHorizontal: 6 },
   gridRow: { flexDirection: 'row' },
 });
