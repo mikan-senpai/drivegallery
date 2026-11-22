@@ -29,3 +29,6 @@ node_modules/
 npm-debug.*
 yarn-error.*
 .DS_Store
+
+# Launch video output (frames, renders)
+brag-output*/
