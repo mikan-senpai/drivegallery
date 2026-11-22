@@ -2,9 +2,16 @@
 
 **Your photos are already in Google Drive. DriveGallery just lets you see them.**
 
-[![DriveGallery launch video: click for the full video with sound](docs/assets/demo.gif)](https://github.com/mikan-senpai/drivegallery/releases/download/v0.1.1/brag.mp4)
+![DriveGallery in 20 seconds](docs/assets/demo.gif)
 
-**[⬇ Download for Android (latest APK)](https://github.com/mikan-senpai/drivegallery/releases/latest)** · [Watch with sound](https://github.com/mikan-senpai/drivegallery/releases/download/v0.1.1/brag.mp4)
+**[⬇ Download for Android (latest APK)](https://github.com/mikan-senpai/drivegallery/releases/latest)**
+
+<details>
+<summary><b>▶ Watch the launch video with sound</b></summary>
+
+https://github.com/user-attachments/assets/1d5b2a65-87a5-4066-8451-cc2f87624bcf
+
+</details>
 
 A Google Photos–style gallery for the images and videos already in your Google Drive. Built with **Expo (React Native)** for Android and iOS. Your files stay in Drive — the app is a viewer, with an on-device index so it opens instantly.
 
