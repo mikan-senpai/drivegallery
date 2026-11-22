@@ -27,7 +27,7 @@ export const useSession = create<SessionState>((set) => ({
   demoMode: false,
 
   restore: async () => {
-    const tokens = await loadTokens();
+    const tokens = await loadTokens().catch(() => null);
     set(tokens ? { status: 'signedIn', email: tokens.email } : { status: 'signedOut' });
   },
 

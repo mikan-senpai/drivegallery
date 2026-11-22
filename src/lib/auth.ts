@@ -108,6 +108,15 @@ export async function getValidAccessToken(force = false): Promise<string | null>
     return stored.accessToken;
   }
 
+  // Many Drive calls can expire at once; google-signin rejects overlapping
+  // silent sign-ins, so they all share one refresh.
+  if (!refreshing) refreshing = refreshToken(stored).finally(() => (refreshing = null));
+  return refreshing;
+}
+
+let refreshing: Promise<string | null> | null = null;
+
+async function refreshToken(stored: Awaited<ReturnType<typeof loadTokens>>): Promise<string | null> {
   const { GoogleSignin } = gsi();
   configure();
   if (!GoogleSignin.hasPreviousSignIn()) return null;

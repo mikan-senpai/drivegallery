@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, StyleSheet, Pressable, AppState, Alert, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PhotoTile } from '@/components/PhotoTile';
 import { EmptyState } from '@/components/EmptyState';
@@ -58,13 +58,13 @@ export default function Locked() {
     }
   }, []);
 
-  // Prompt on arrival; lock again on leaving.
-  useFocusEffect(
-    useCallback(() => {
-      void tryUnlock();
-      return () => setUnlocked(false);
-    }, [tryUnlock])
-  );
+  // Prompt on arrival. Leaving the screen unmounts it (locked again); opening
+  // a locked photo keeps it mounted, so coming back doesn't ask again.
+  useEffect(() => {
+    // State is set after the async system prompt resolves, not synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void tryUnlock();
+  }, [tryUnlock]);
 
   // Lock as soon as the app leaves the foreground.
   useEffect(() => {
@@ -153,7 +153,7 @@ export default function Locked() {
         keyExtractor={(row) => row[0].id}
         contentContainerStyle={{ paddingHorizontal: GUTTER, paddingBottom: insets.bottom + 40 }}
         ListEmptyComponent={
-          isLoading ? undefined : (
+          isLoading || folders.length > 0 ? undefined : (
             <EmptyState
               icon="lock"
               title="Nothing locked yet"

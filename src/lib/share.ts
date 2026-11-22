@@ -38,7 +38,8 @@ export async function downloadToCache(items: MediaItem[], opts: { demo?: boolean
   return Promise.all(
     items.map((item) => {
       const url = opts.demo ? (item.thumbnailUrl ?? '') : mediaUrl(item.id);
-      const target = new File(dir, safeName(item));
+      // Prefix the id: two "IMG_0001.jpg" from different folders must not collide.
+      const target = new File(dir, `${item.id}-${safeName(item)}`);
       return File.downloadFileAsync(url, target, { headers, idempotent: true });
     })
   );

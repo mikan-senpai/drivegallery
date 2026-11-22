@@ -46,7 +46,10 @@ export function useMediaItems(): {
   const lockedFolders = useLocked((s) => s.folders);
   // Locked folders are excluded everywhere, exactly like hidden ones.
   const selection = useMemo(
-    () => ({ include: chosen.include, exclude: [...new Set([...chosen.exclude, ...lockedFolders])] }),
+    () => ({
+      include: chosen.include.filter((id) => !lockedFolders.includes(id)),
+      exclude: [...new Set([...chosen.exclude, ...lockedFolders])],
+    }),
     [chosen, lockedFolders]
   );
   const scoped = selection.include.length > 0 || selection.exclude.length > 0;

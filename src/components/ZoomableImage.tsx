@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Image, type ImageSource } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -28,9 +28,20 @@ export function ZoomableImage({ source, placeholder, width, height, onZoomChange
   const sty = useSharedValue(0);
   const [zoomed, setZoomed] = useState(false);
 
+  // Every page gets a new inline callback on each render; firing on that would
+  // let an unzoomed neighbour re-enable paging. Fire only when `zoomed` changes.
+  const onZoomChangeRef = useRef(onZoomChange);
   useEffect(() => {
-    onZoomChange?.(zoomed);
-  }, [zoomed, onZoomChange]);
+    onZoomChangeRef.current = onZoomChange;
+  });
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    onZoomChangeRef.current?.(zoomed);
+  }, [zoomed]);
 
   const reset = () => {
     'worklet';

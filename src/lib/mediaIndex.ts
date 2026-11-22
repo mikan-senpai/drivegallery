@@ -31,6 +31,7 @@ async function open(): Promise<SQLite.SQLiteDatabase> {
   const conn = await SQLite.openDatabaseAsync(DB_NAME);
   await conn.execAsync(`
     PRAGMA journal_mode = WAL;
+    PRAGMA busy_timeout = 5000;
     CREATE TABLE IF NOT EXISTS media (
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
@@ -125,10 +126,22 @@ function toItem(r: Row): MediaItem {
 /** Store the bare Drive link (strip our size suffix) so sizes can be re-derived. */
 const bareThumb = (url?: string) => (url ? url.replace(/=s\d+$/, '') : null);
 
+/**
+ * Writes run one at a time: upsertMedia's exclusive transaction holds a second
+ * connection, and a write from another path meanwhile fails with
+ * "database is locked".
+ */
+let writeChain: Promise<unknown> = Promise.resolve();
+function serialWrite<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(fn, fn);
+  writeChain = run.catch(() => {});
+  return run;
+}
+
 export async function upsertMedia(items: MediaItem[]): Promise<void> {
   if (items.length === 0) return;
   const conn = await db();
-  await conn.withExclusiveTransactionAsync(async (txn) => {
+  await serialWrite(() => conn.withExclusiveTransactionAsync(async (txn) => {
     const stmt = await txn.prepareAsync(
       `INSERT INTO media (id, name, mime, kind, size, taken_at, width, height, duration_ms, thumb, parent, md5, lat, lng, camera)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -161,16 +174,18 @@ export async function upsertMedia(items: MediaItem[]): Promise<void> {
     } finally {
       await stmt.finalizeAsync();
     }
-  });
+  }));
 }
 
 export async function deleteMedia(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const conn = await db();
-  for (let i = 0; i < ids.length; i += 500) {
-    const chunk = ids.slice(i, i + 500);
-    await conn.runAsync(`DELETE FROM media WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk);
-  }
+  await serialWrite(async () => {
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      await conn.runAsync(`DELETE FROM media WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk);
+    }
+  });
 }
 
 /** All indexed media in the given folder scope, newest first. */
@@ -215,12 +230,15 @@ export async function getMeta(key: string): Promise<string | null> {
 
 export async function setMeta(key: string, value: string | null): Promise<void> {
   const conn = await db();
-  if (value === null) await conn.runAsync('DELETE FROM meta WHERE key = ?', [key]);
-  else await conn.runAsync('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [key, value]);
+  await serialWrite(() =>
+    value === null
+      ? conn.runAsync('DELETE FROM meta WHERE key = ?', [key])
+      : conn.runAsync('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [key, value])
+  );
 }
 
 /** Wipe the index (sign-out / account switch). */
 export async function clearIndex(): Promise<void> {
   const conn = await db();
-  await conn.execAsync('DELETE FROM media; DELETE FROM meta;');
+  await serialWrite(() => conn.execAsync('DELETE FROM media; DELETE FROM meta;'));
 }

@@ -17,10 +17,10 @@ const FEATURES = [
 
 export default function Connect() {
   const { palette } = useTheme();
-  const { status, connect, enterDemo } = useSession();
+  const { status, demoMode, connect, enterDemo } = useSession();
   const [busy, setBusy] = useState(false);
 
-  if (status === 'signedIn') return <Redirect href="/" />;
+  if (status === 'signedIn' && !demoMode) return <Redirect href="/" />;
 
   const onConnect = async () => {
     setBusy(true);

@@ -145,7 +145,6 @@ class CrashReporterModule : Module() {
       ApplicationExitInfo.REASON_CRASH,
       ApplicationExitInfo.REASON_CRASH_NATIVE,
       ApplicationExitInfo.REASON_ANR,
-      ApplicationExitInfo.REASON_LOW_MEMORY,
       ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE
     )
   }
