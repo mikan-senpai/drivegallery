@@ -5,7 +5,6 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
-  runOnJS,
 } from 'react-native-reanimated';
 
 const AnimatedImage = Animated.createAnimatedComponent(Image);
@@ -43,30 +42,34 @@ export function ZoomableImage({ source, placeholder, width, height, onZoomChange
     sty.value = 0;
   };
 
+  // Pinch and double-tap set React state, so they run on the JS thread
+  // (worklet->JS handoff via runOnJS crashed in worklets 0.13).
   const pinch = Gesture.Pinch()
+    .runOnJS(true)
     .onUpdate((e) => {
       scale.value = Math.max(1, saved.value * e.scale);
     })
     .onEnd(() => {
       saved.value = scale.value;
       if (scale.value > 1) {
-        runOnJS(setZoomed)(true);
+        setZoomed(true);
       } else {
         reset();
-        runOnJS(setZoomed)(false);
+        setZoomed(false);
       }
     });
 
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
+    .runOnJS(true)
     .onEnd(() => {
       if (scale.value > 1) {
         reset();
-        runOnJS(setZoomed)(false);
+        setZoomed(false);
       } else {
         scale.value = withTiming(2.5);
         saved.value = 2.5;
-        runOnJS(setZoomed)(true);
+        setZoomed(true);
       }
     });
 

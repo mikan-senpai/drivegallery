@@ -9,7 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { useEvent } from 'expo';
 import type { VideoPlayer } from 'expo-video';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { formatDuration } from '@/lib/format';
 
 const HIDE_AFTER_MS = 3000;
@@ -78,14 +78,15 @@ export function VideoControls({ player }: { player: VideoPlayer }) {
 
   const seek = Gesture.Pan()
     .minDistance(0)
+    .runOnJS(true)
     .onBegin((e) => {
-      runOnJS(seekTo)(e.x);
+      seekTo(e.x);
     })
     .onUpdate((e) => {
-      runOnJS(seekTo)(e.x);
+      seekTo(e.x);
     })
     .onEnd((e) => {
-      runOnJS(commit)(e.x);
+      commit(e.x);
     });
 
   const fade = useAnimatedStyle(() => ({ opacity: opacity.get() }));

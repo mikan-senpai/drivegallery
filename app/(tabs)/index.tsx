@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
@@ -157,28 +157,26 @@ export default function Timeline() {
   const pinchScale = useSharedValue(1);
   // Pinch previews the zoom (gently scaling the grid), then snaps to a new column count.
   /* eslint-disable react-hooks/refs -- gesture callbacks run on the UI thread at gesture time, not during render */
+  // Callbacks run on the JS thread (runOnJS(true)): they mostly call React
+  // state, and worklet->JS handoff (runOnJS) crashed in worklets 0.13.
   const pinch = Gesture.Pinch()
+    .runOnJS(true)
     .onUpdate((e) => {
       pinchScale.set(Math.min(1.12, Math.max(0.9, e.scale)));
     })
     .onEnd((e) => {
-      if (e.scale > PINCH_OUT) runOnJS(changeCols)(-1);
-      else if (e.scale < PINCH_IN) runOnJS(changeCols)(1);
+      if (e.scale > PINCH_OUT) changeCols(-1);
+      else if (e.scale < PINCH_IN) changeCols(1);
     })
     .onFinalize(() => {
       pinchScale.set(withTiming(1, { duration: 180 }));
     });
   const dragSelect = Gesture.Pan()
+    .runOnJS(true)
     .activateAfterLongPress(300)
-    .onStart((e) => {
-      runOnJS(beginDrag)(e.x, e.y);
-    })
-    .onUpdate((e) => {
-      runOnJS(moveDrag)(e.x, e.y);
-    })
-    .onFinalize(() => {
-      runOnJS(endDrag)();
-    });
+    .onStart((e) => beginDrag(e.x, e.y))
+    .onUpdate((e) => moveDrag(e.x, e.y))
+    .onFinalize(() => endDrag());
   const gridGesture = Gesture.Simultaneous(pinch, dragSelect);
   /* eslint-enable react-hooks/refs */
   const gridStyle = useAnimatedStyle(() => ({ transform: [{ scale: pinchScale.get() }] }));

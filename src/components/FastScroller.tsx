@@ -15,7 +15,7 @@ import React, { useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import { type } from '@/theme/tokens';
@@ -104,20 +104,22 @@ export function FastScroller({ ref, top, bottom, onSeek, labelForOffset }: Props
     scheduleHide();
   };
 
+  // JS-thread callbacks: they drive React state and the list scroll anyway.
   const pan = Gesture.Pan()
+    .runOnJS(true)
     // A slim handle is fiddly to grab; widen the touch area toward the content.
     .hitSlop({ left: 18, top: 10, bottom: 10 })
     .onBegin(() => {
       startProgress.set(progress.get());
-      runOnJS(begin)();
+      begin();
     })
     .onUpdate((e) => {
       const p = Math.min(1, Math.max(0, startProgress.get() + e.translationY / travel));
       progress.set(p);
-      runOnJS(seek)(p);
+      seek(p);
     })
     .onFinalize(() => {
-      runOnJS(end)();
+      end();
     });
 
   const thumbStyle = useAnimatedStyle(() => ({ transform: [{ translateY: progress.get() * travel }] }));
