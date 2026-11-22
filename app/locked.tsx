@@ -2,7 +2,7 @@
  * Locked folder. Opens only after fingerprint / face / screen-lock unlock and
  * locks again when you leave the screen or the app goes to the background.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, AppState, Alert, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Feather } from '@expo/vector-icons';
@@ -33,8 +33,21 @@ export default function Locked() {
   const { data: folderIndex } = useFolderIndex(unlocked);
   const { data: items = [], isLoading } = useLockedItems(unlocked);
 
+  // The system unlock prompt can briefly move the app out of the 'active'
+  // state; don't treat that as leaving the app.
+  const authenticating = useRef(false);
+
   const tryUnlock = useCallback(async () => {
-    const result = await unlock('Unlock your Locked folder');
+    if (authenticating.current) return;
+    authenticating.current = true;
+    let result: Awaited<ReturnType<typeof unlock>>;
+    try {
+      result = await unlock('Unlock your Locked folder');
+    } catch {
+      result = 'cancelled';
+    } finally {
+      authenticating.current = false;
+    }
     if (result === 'ok') {
       setMessage(null);
       setUnlocked(true);
@@ -56,7 +69,7 @@ export default function Locked() {
   // Lock as soon as the app leaves the foreground.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => {
-      if (s !== 'active') setUnlocked(false);
+      if (s === 'background' && !authenticating.current) setUnlocked(false);
     });
     return () => sub.remove();
   }, []);
