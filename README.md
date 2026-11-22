@@ -1,20 +1,32 @@
 # DriveGallery
 
+**Your photos are already in Google Drive. DriveGallery just lets you see them.**
+
+[![DriveGallery launch video: click for the full video with sound](docs/assets/demo.gif)](https://github.com/mikan-senpai/drivegallery/releases/download/v0.1.1/brag.mp4)
+
+**[⬇ Download for Android (latest APK)](https://github.com/mikan-senpai/drivegallery/releases/latest)** · [Watch with sound](https://github.com/mikan-senpai/drivegallery/releases/download/v0.1.1/brag.mp4)
+
 A Google Photos–style gallery for the images and videos already in your Google Drive. Built with **Expo (React Native)** for Android and iOS. Your files stay in Drive — the app is a viewer, with an on-device index so it opens instantly.
 
 Design: **Twilight Stillness** — Lora + Outfit type, liquid-glass tab bar, two themes: **Paper** (light) and **Twilight** (dark).
 
-Specs: [`docs/PRD.md`](docs/PRD.md) · Privacy: [`docs/privacy.md`](docs/privacy.md)
+Specs: [`docs/PRD.md`](docs/PRD.md) · Privacy: [`docs/privacy.md`](docs/privacy.md) · Project history and status: [`docs/HANDOFF.md`](docs/HANDOFF.md)
 
 ## Features
 
 - Timeline grouped by day, **pinch to zoom** (2–6 per row), Samsung-style **fast scroller** with a date bubble
+- **Drag to select** (or tap a date for the whole day), then **Share**, **Save to phone** or Trash
+- **Albums** from your Drive folders; **hide** any album and it disappears everywhere
+- **Locked folder**: albums that open only with your fingerprint or screen lock
+- **Places**: your photos on a map (OpenStreetMap, no API key)
+- **Free up space**: find duplicates, large files and screenshots
+- **Search** by name, folder, month, year or camera
+- Full-screen viewer: swipe, pinch/double-tap zoom, **video** with custom controls, **slideshow**, info with folder path
+- **Settings follow your Google account**: hidden albums, Locked folder and favourites come back after a reinstall
 - **Offline index** (SQLite + Drive Changes API): instant launch, whole-library scrolling, delta sync
-- **Folder selection**: show/hide Drive folders (subfolders included, exclusions supported)
-- Full-screen viewer: swipe, pinch/double-tap zoom, **video playback** (streams from Drive), info with folder path
-- **Multi-select** (long-press): share or move to Trash in bulk
-- **Favorites**, Drive-folder **Albums**, search by filename
 - Sign in with Google (read-only); edit access is requested only the first time you delete
+
+Known issue: moving to Trash doesn't work yet ([handoff](docs/HANDOFF.md)).
 
 ## Quick start (UI only, demo photos)
 
@@ -47,7 +59,7 @@ npx expo start --dev-client
 In [Google Cloud Console](https://console.cloud.google.com) (Google Auth Platform):
 
 1. Enable the **Google Drive API**.
-2. **Data Access** → add scopes `.../auth/drive.readonly` and `.../auth/drive`.
+2. **Data Access** → add scopes `.../auth/drive.readonly`, `.../auth/drive.appdata` and `.../auth/drive`.
 3. **Audience** → while in *Testing*, add every user's Gmail as a **test user** (max 100).
 4. **Clients** → create a **Web application** client (put its ID in `.env` as `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, and as an EAS env var for cloud builds) and an **Android** client with package `com.mikansenpai.drivegallery` and the SHA-1 from *expo.dev → project → Credentials → Android*.
 
