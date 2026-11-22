@@ -154,32 +154,6 @@ export default function Timeline() {
     if (idx >= 0) listRef.current?.scrollToOffset({ offset: Math.max(0, rowOffsets[idx] - headerH), animated: false });
   }, [listRows, rowOffsets, headerH]);
 
-  const pinchScale = useSharedValue(1);
-  // Pinch previews the zoom (gently scaling the grid), then snaps to a new column count.
-  /* eslint-disable react-hooks/refs -- gesture callbacks run on the UI thread at gesture time, not during render */
-  // Callbacks run on the JS thread (runOnJS(true)): they mostly call React
-  // state, and worklet->JS handoff (runOnJS) crashed in worklets 0.13.
-  const pinch = Gesture.Pinch()
-    .runOnJS(true)
-    .onUpdate((e) => {
-      pinchScale.set(Math.min(1.12, Math.max(0.9, e.scale)));
-    })
-    .onEnd((e) => {
-      if (e.scale > PINCH_OUT) changeCols(-1);
-      else if (e.scale < PINCH_IN) changeCols(1);
-    })
-    .onFinalize(() => {
-      pinchScale.set(withTiming(1, { duration: 180 }));
-    });
-  const dragSelect = Gesture.Pan()
-    .runOnJS(true)
-    .activateAfterLongPress(300)
-    .onStart((e) => beginDrag(e.x, e.y))
-    .onUpdate((e) => moveDrag(e.x, e.y))
-    .onFinalize(() => endDrag());
-  const gridGesture = Gesture.Simultaneous(pinch, dragSelect);
-  /* eslint-enable react-hooks/refs */
-  const gridStyle = useAnimatedStyle(() => ({ transform: [{ scale: pinchScale.get() }] }));
 
   // ---- Selection ----
   const selecting = useSelection((s) => s.active);
@@ -299,6 +273,35 @@ export default function Timeline() {
     stopAutoScroll();
     setDragging(false);
   };
+
+  const pinchScale = useSharedValue(1);
+  // Pinch previews the zoom (gently scaling the grid), then snaps to a new column count.
+  // Defined after the drag handlers on purpose: gesture callbacks capture
+  // them when the gesture is built, so they must already exist (otherwise
+  // they're undefined and the app crashes on the first touch).
+  // Callbacks run on the JS thread: they only call React state.
+  /* eslint-disable react-hooks/refs -- gesture callbacks run at gesture time, not during render */
+  const pinch = Gesture.Pinch()
+    .runOnJS(true)
+    .onUpdate((e) => {
+      pinchScale.set(Math.min(1.12, Math.max(0.9, e.scale)));
+    })
+    .onEnd((e) => {
+      if (e.scale > PINCH_OUT) changeCols(-1);
+      else if (e.scale < PINCH_IN) changeCols(1);
+    })
+    .onFinalize(() => {
+      pinchScale.set(withTiming(1, { duration: 180 }));
+    });
+  const dragSelect = Gesture.Pan()
+    .runOnJS(true)
+    .activateAfterLongPress(300)
+    .onStart((e) => beginDrag(e.x, e.y))
+    .onUpdate((e) => moveDrag(e.x, e.y))
+    .onFinalize(() => endDrag());
+  const gridGesture = Gesture.Simultaneous(pinch, dragSelect);
+  /* eslint-enable react-hooks/refs */
+  const gridStyle = useAnimatedStyle(() => ({ transform: [{ scale: pinchScale.get() }] }));
 
   /** While selecting, tapping a date header selects (or clears) that whole day. */
   const toggleDay = (headerId: string) => {
