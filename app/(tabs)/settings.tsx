@@ -91,6 +91,8 @@ export default function Settings() {
             <Row palette={palette} icon="log-out" label="Disconnect" destructive onPress={onDisconnect} />
           )}
         </Section>
+
+        <Text style={[type.caption, styles.credit, { color: palette.fgVariant }]}>made by mikan❤️</Text>
       </ScrollView>
     </View>
   );
@@ -140,6 +142,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
   },
+  credit: { textAlign: 'center' },
 });
 
 /**

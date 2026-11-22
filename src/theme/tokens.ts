@@ -52,6 +52,31 @@ export const palettes: Record<ThemeName, Palette> = {
   },
 };
 
+/**
+ * Frosted-glass material: tier 2 of the glass UI spec (glass-ui-design.md,
+ * sections 4 and 5). Blur, tint, rim and shadow. The edge refraction of tier 3
+ * needs a shader on the backdrop, which this app does not have.
+ */
+export const glass = {
+  /** Backdrop blur in dp. Wider than the spec's 8 because no lens breaks up the text behind. */
+  blurRadius: 16,
+  /** Body colour of the slab, as RGB so its opacity can be shared with expo-blur's own tint. */
+  tint: { paper: '250,250,250', twilight: '18,18,18' } satisfies Record<ThemeName, string>,
+  tintOpacity: 0.4,
+  /**
+   * The spec's rim is white at 50%, lit from 45°, which a shader spreads from
+   * 0 to 50% around the edge. Without one this is the value a straight edge
+   * gets (50% × cos 45°), drawn evenly.
+   */
+  rim: { width: 0.5, color: 'rgba(255,255,255,0.35)' },
+  shadow: { offsetY: 4, blurRadius: 24, color: 'rgba(0,0,0,0.10)' },
+  /** Selected-item pill on a glass bar: a bright lift in both themes. */
+  indicator: {
+    paper: 'rgba(255,255,255,0.5)',
+    twilight: 'rgba(255,255,255,0.14)',
+  } satisfies Record<ThemeName, string>,
+} as const;
+
 export const radius = {
   sm: 16,
   md: 22,

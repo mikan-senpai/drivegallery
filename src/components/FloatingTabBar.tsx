@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Pressable, StyleSheet, Platform, type LayoutChangeEvent } from 'react-native';
+import { View, Pressable, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname, useRouter, type Href } from 'expo-router';
@@ -9,7 +9,7 @@ import { GlassView } from '@/components/GlassView';
 import { useBlurTarget } from '@/theme/BlurTarget';
 import { useSelection } from '@/store/selection';
 import { useTheme } from '@/theme/ThemeProvider';
-import { radius } from '@/theme/tokens';
+import { glass, radius } from '@/theme/tokens';
 
 const TABS: { href: Href; path: string; icon: keyof typeof Feather.glyphMap }[] = [
   { href: '/', path: '/', icon: 'grid' },
@@ -19,17 +19,17 @@ const TABS: { href: Href; path: string; icon: keyof typeof Feather.glyphMap }[] 
 ];
 
 const BAR_HEIGHT = 58;
-/** How far the active lens bulges past the bar, top/bottom and left/right. */
+/** How far the active pill bulges past the bar, top/bottom and left/right. */
 const LENS_OVERFLOW_Y = 6;
 const LENS_OVERFLOW_X = 4;
 
 /**
- * iOS 26-style tab bar: a near-clear glass bar with a raised glass lens over the
- * active tab that springs between tabs. Rendered by the tabs layout outside the
- * blur target, so both the bar and the lens blur the screens behind them.
+ * iOS 26-style tab bar: a frosted glass bar with a raised pill over the active
+ * tab that springs between tabs. Rendered by the tabs layout outside the blur
+ * target, so the bar blurs the screens behind it.
  */
 export function FloatingTabBar() {
-  const { palette } = useTheme();
+  const { palette, name } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
@@ -53,24 +53,22 @@ export function FloatingTabBar() {
   return (
     <View style={[styles.wrap, { bottom: insets.bottom + 18 }]} pointerEvents="box-none">
       <View style={styles.bar} onLayout={(e: LayoutChangeEvent) => setBarWidth(e.nativeEvent.layout.width)}>
-        {/* Bar body: nearly clear glass. */}
-        <View style={styles.shadow}>
-          <GlassView radius={radius.full} blurTarget={blurTarget} style={styles.fill} />
-        </View>
+        {/* Bar body: frosted glass, which draws its own shadow. */}
+        <GlassView variant="frost" radius={radius.full} blurTarget={blurTarget} style={StyleSheet.absoluteFill} />
 
-        {/* Active lens: a raised glass droplet that bulges past the bar. */}
+        {/* Active pill: a flat bright lift that bulges past the bar. Flat, not a
+            second glass: on Android a blur here would sample the screens and not
+            the bar under it, and show them sharper than the bar around it. */}
         {itemW > 0 && (
           <Animated.View
             pointerEvents="none"
             style={[styles.lens, { width: itemW + LENS_OVERFLOW_X * 2 }, lensStyle]}
           >
-            <View style={styles.lensShadow}>
-              <GlassView radius={radius.full} blurTarget={blurTarget} style={styles.fill} />
-            </View>
+            <View style={[styles.pill, { backgroundColor: glass.indicator[name] }]} />
           </Animated.View>
         )}
 
-        {/* Icons on top of both glass layers. */}
+        {/* Icons on top of the bar and the pill. */}
         <View style={styles.row}>
           {TABS.map((tab, i) => {
             const focused = i === activeIndex;
@@ -93,32 +91,18 @@ export function FloatingTabBar() {
 const styles = StyleSheet.create({
   wrap: { position: 'absolute', left: 22, right: 22 },
   bar: { height: BAR_HEIGHT },
-  fill: { flex: 1 },
-  shadow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: radius.full,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 20, shadowOffset: { width: 0, height: 10 } },
-      android: {},
-    }),
-  },
   lens: {
     position: 'absolute',
     left: 0,
     top: -LENS_OVERFLOW_Y,
     bottom: -LENS_OVERFLOW_Y,
   },
-  lensShadow: {
+  pill: {
     flex: 1,
     borderRadius: radius.full,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
-      android: {},
-    }),
+    borderCurve: 'continuous',
+    borderWidth: glass.rim.width,
+    borderColor: glass.rim.color,
   },
   row: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center' },
   item: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'center' },
