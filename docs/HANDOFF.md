@@ -2,7 +2,7 @@
 
 Read this first if you're picking the project up later. It records what the app is, how it's built and shipped, what happened along the way, and exactly where things stand.
 
-**Last updated:** 2026-11-22 · **Latest release:** v0.1.1 (tag on `feat/frost-glass-variant`, see Status)
+**Last updated:** 2026-11-22 · **Latest release:** v0.1.1 (from `main`)
 
 ---
 
@@ -108,6 +108,6 @@ Ask the user to screenshot or copy that screen. It turned a blind native crash i
 - Places map reloads (zoom resets) while a library scan is still running.
 - `album/[id]` route warning about presentation (harmless).
 
-**Branches:** `main` = 5e3c2cc (all fixes). `feat/frost-glass-variant` = main + glass tab bar + credit + arm-only APK setting; **v0.1.1 is tagged here**. If the glass variant is accepted as production, fast-forward `main` to it (`git checkout main && git merge --ff-only feat/frost-glass-variant && git push`).
+**Branches:** `main` is production. It includes the glass redesign (fast-forwarded from `feat/frost-glass-variant` on 2026-11-22). v0.1.1 is tagged at 41064aa, one commit before this handoff doc.
 
 **Next:** the owner has a new feature to implement first. Then come back to Trash.
